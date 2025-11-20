@@ -2,7 +2,7 @@
   "name": "signal-analyzer",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://your-username.github.io/signal-analyzer",
+  "homepage": "https://robot756.github.io/signal-analyzer",
   "dependencies": {
     "chart.js": "^4.4.0",
     "chartjs-plugin-zoom": "^2.2.0",
