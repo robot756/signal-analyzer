@@ -1,0 +1,112 @@
+import React, { useState, useRef } from "react";
+import { processCSVData, generateChartData } from "./csvProcessor";
+import ChartComponent from "./ChartComponent";
+import "./App.css";
+
+function App() {
+  const [chartData, setChartData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const fileInputRef = useRef(null);
+
+  const handleFileUpload = async (event) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const results = await processCSVData(files[0]);
+      const chartData = generateChartData(results);
+      setChartData(chartData);
+    } catch (err) {
+      setError(`Ошибка обработки файла: ${err.message}`);
+      console.error("Processing error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDrop = (event) => {
+    event.preventDefault();
+    const files = event.dataTransfer.files;
+    if (files.length > 0) {
+      handleFileUpload({ target: { files } });
+    }
+  };
+
+  const handleDragOver = (event) => {
+    event.preventDefault();
+  };
+
+  const resetFiles = () => {
+    setChartData(null);
+    setError("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>Анализатор сигналов</h1>
+        <p>Загрузите CSV файл для построения графиков</p>
+      </header>
+
+      <main className="App-main">
+        {!chartData && !loading && (
+          <div
+            className="drop-zone"
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,.CSV"
+              onChange={handleFileUpload}
+              style={{ display: "none" }}
+              id="file-input"
+            />
+            <label htmlFor="file-input" className="file-label">
+              <div className="upload-icon">📁</div>
+              <p>Нажмите для выбора файла или перетащите его сюда</p>
+              <p className="file-hint">Поддерживаемый формат: CSV</p>
+            </label>
+          </div>
+        )}
+
+        {loading && (
+          <div className="loading">
+            <div className="spinner"></div>
+            <p>Обработка данных...</p>
+          </div>
+        )}
+
+        {error && (
+          <div className="error">
+            <p>{error}</p>
+            <button onClick={resetFiles} className="reset-btn">
+              Попробовать снова
+            </button>
+          </div>
+        )}
+
+        {chartData && (
+          <div className="chart-container">
+            <div className="chart-controls">
+              <button onClick={resetFiles} className="reset-btn">
+                Загрузить другой файл
+              </button>
+            </div>
+            <ChartComponent data={chartData} />
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+export default App;
