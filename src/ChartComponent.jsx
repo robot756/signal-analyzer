@@ -53,7 +53,9 @@ const ChartComponent = ({ data }) => {
   const [processedAxisVisibility, setProcessedAxisVisibility] = useState({});
   const [intersectionVisibility, setIntersectionVisibility] = useState(true);
   const [tenzOffset, setTenzOffset] = useState(0); // Сдвиг тензосигнала по Y
+  const [interfOffset, setInterfOffset] = useState(0); // Сдвиг интерферосигнала по Y
   const [currentIntersections, setCurrentIntersections] = useState([]); // Текущие пересечения
+  const interfCenterPoint = data?.focusPoints?.interfCenter;
 
   const formatTime = (value) => {
     if (typeof value !== "number") return "-";
@@ -198,6 +200,31 @@ const ChartComponent = ({ data }) => {
     };
   }, [data]);
 
+  const centerOriginalChartOnTime = useCallback((centerTime, windowHint) => {
+    const chart = originalChartInstance.current;
+    if (!chart || typeof centerTime !== "number") return;
+
+    const xScale = chart.scales?.x;
+    if (!xScale) return;
+
+    const currentRange = xScale.max - xScale.min;
+    const spanCandidate =
+      currentRange > 0 && isFinite(currentRange)
+        ? currentRange / 2
+        : windowHint ?? 1e-6;
+    const span = isFinite(spanCandidate) && spanCandidate > 0 ? spanCandidate : 1e-6;
+
+    chart.options.scales.x.min = centerTime - span;
+    chart.options.scales.x.max = centerTime + span;
+    chart.update("none");
+  }, []);
+
+  useEffect(() => {
+    if (interfCenterPoint?.time) {
+      centerOriginalChartOnTime(interfCenterPoint.time, interfCenterPoint.window);
+    }
+  }, [interfCenterPoint, centerOriginalChartOnTime]);
+
   useEffect(() => {
     if (data?.original) {
       const visibilityMap = {};
@@ -223,23 +250,28 @@ const ChartComponent = ({ data }) => {
     }
   }, [data]);
 
-  // Обновление графиков при изменении сдвига тензосигнала
+  // Обновление графиков при изменении сдвигов сигналов
   useEffect(() => {
-    if (!data?.rawData || !originalChartInstance.current || !processedChartInstance.current) {
+    if (
+      !data?.rawData ||
+      !originalChartInstance.current ||
+      !processedChartInstance.current
+    ) {
       return;
     }
 
     const { t, tenz, interfCorrected } = data.rawData;
-    
-    // Обновляем тензосигнал с учетом сдвига
+
+    // Обновляем сигналы с учетом сдвигов
     const shiftedTenz = tenz.map((val) => val + tenzOffset);
+    const shiftedInterf = interfCorrected.map((val) => val + interfOffset);
     
     // Обновляем график исходных данных
     const originalChart = originalChartInstance.current;
     const tenzDatasetIndex = originalChart.data.datasets.findIndex(
       (ds) => ds.label === "Тензометрический сигнал (CH1)"
     );
-    
+
     if (tenzDatasetIndex !== -1) {
       originalChart.data.datasets[tenzDatasetIndex].data = t.map((time, idx) => ({
         x: time,
@@ -247,12 +279,22 @@ const ChartComponent = ({ data }) => {
       }));
     }
 
+    const interfDatasetIndex = originalChart.data.datasets.findIndex(
+      (ds) => ds.label === "Интерф центрированный"
+    );
+    if (interfDatasetIndex !== -1) {
+      originalChart.data.datasets[interfDatasetIndex].data = t.map((time, idx) => ({
+        x: time,
+        y: shiftedInterf[idx],
+      }));
+    }
+
     // Пересчитываем пересечения
     const newIntersections = [];
     const yThreshold = 0.02;
     for (let i = 1; i < interfCorrected.length; i++) {
-      const diffPrev = shiftedTenz[i - 1] - interfCorrected[i - 1];
-      const diffCurr = shiftedTenz[i] - interfCorrected[i];
+      const diffPrev = shiftedTenz[i - 1] - shiftedInterf[i - 1];
+      const diffCurr = shiftedTenz[i] - shiftedInterf[i];
 
       if ((diffPrev <= 0 && diffCurr > 0) || (diffPrev >= 0 && diffCurr < 0)) {
         const t1 = t[i - 1];
@@ -263,8 +305,10 @@ const ChartComponent = ({ data }) => {
 
         const ratio = -diffPrev / diffDelta;
         const time = t1 + ratio * (t2 - t1);
-        const tenzValue = shiftedTenz[i - 1] + ratio * (shiftedTenz[i] - shiftedTenz[i - 1]);
-        const interfValue = interfCorrected[i - 1] + ratio * (interfCorrected[i] - interfCorrected[i - 1]);
+        const tenzValue =
+          shiftedTenz[i - 1] + ratio * (shiftedTenz[i] - shiftedTenz[i - 1]);
+        const interfValue =
+          shiftedInterf[i - 1] + ratio * (shiftedInterf[i] - shiftedInterf[i - 1]);
         const value = (tenzValue + interfValue) / 2;
 
         if (Math.abs(value) <= yThreshold) {
@@ -331,10 +375,19 @@ const ChartComponent = ({ data }) => {
 
     originalChart.update("none");
     processedChart.update("none");
-  }, [tenzOffset, data?.rawData]);
+  }, [tenzOffset, interfOffset, data?.rawData]);
 
   const handleResetOriginal = useCallback(() => {
-    originalChartInstance.current?.resetZoom();
+    const chart = originalChartInstance.current;
+    if (!chart) return;
+
+    if (chart.options?.scales?.x) {
+      chart.options.scales.x.min = undefined;
+      chart.options.scales.x.max = undefined;
+    }
+
+    chart.resetZoom();
+    chart.update("none");
   }, []);
 
   const handleResetProcessed = useCallback(() => {
@@ -453,6 +506,20 @@ const ChartComponent = ({ data }) => {
     };
   }, [data?.rawData]);
 
+  const interfOffsetRange = useMemo(() => {
+    if (!data?.rawData?.interfCorrected) {
+      return { min: -1, max: 1, step: 0.001 };
+    }
+    const values = data.rawData.interfCorrected;
+    const range = Math.max(...values) - Math.min(...values);
+    const safeRange = range || 1;
+    return {
+      min: -safeRange,
+      max: safeRange,
+      step: safeRange / 1000,
+    };
+  }, [data?.rawData]);
+
   return (
     <div className="charts-wrapper">
       {data?.rawData && (
@@ -493,6 +560,44 @@ const ChartComponent = ({ data }) => {
           </div>
         </div>
       )}
+      {data?.rawData && (
+        <div className="tenz-offset-control">
+          <label htmlFor="interf-offset-input" className="tenz-offset-label">
+            Сдвиг интерферосигнала по оси Y:
+          </label>
+          <div className="tenz-offset-input-group">
+            <input
+              id="interf-offset-input"
+              type="range"
+              min={interfOffsetRange.min}
+              max={interfOffsetRange.max}
+              step={interfOffsetRange.step}
+              value={interfOffset}
+              onChange={(e) => setInterfOffset(parseFloat(e.target.value))}
+              className="tenz-offset-slider"
+            />
+            <input
+              type="number"
+              min={interfOffsetRange.min}
+              max={interfOffsetRange.max}
+              step={interfOffsetRange.step}
+              value={interfOffset}
+              onChange={(e) =>
+                setInterfOffset(parseFloat(e.target.value) || 0)
+              }
+              className="tenz-offset-number"
+            />
+            <button
+              type="button"
+              className="tenz-offset-reset-btn"
+              onClick={() => setInterfOffset(0)}
+              aria-label="Сбросить сдвиг интерферосигнала"
+            >
+              Сбросить
+            </button>
+          </div>
+        </div>
+      )}
       <section className="chart-section">
         <div className="chart-controls-group">
           <div className="zoom-controls" role="group" aria-label="Управление масштабом">
@@ -520,6 +625,21 @@ const ChartComponent = ({ data }) => {
             >
               ↺ Сбросить
             </button>
+            {interfCenterPoint?.time && (
+              <button
+                type="button"
+                className="zoom-center-btn"
+                onClick={() =>
+                  centerOriginalChartOnTime(
+                    interfCenterPoint.time,
+                    interfCenterPoint.window
+                  )
+                }
+                aria-label="Центрировать по скачку интерф"
+              >
+                Центр. Интерф
+              </button>
+            )}
           </div>
         </div>
         {originalAxisOptions.length > 0 && (

@@ -288,6 +288,91 @@ const findSignalIntersectionsAtZero = (t, tenz, interf, yThreshold = 0.02) => {
   return intersections;
 };
 
+// -------------------- Поиск максимального скачка --------------------
+const findJumpByDerivative = (t, signal) => {
+  const slopes = [];
+  for (let i = 1; i < signal.length; i++) {
+    const dt = Math.max(t[i] - t[i - 1], 1e-12);
+    slopes.push((signal[i] - signal[i - 1]) / dt);
+  }
+
+  if (slopes.length === 0) return null;
+
+  let maxIdx = 0;
+  let maxSlope = slopes[0];
+  for (let i = 1; i < slopes.length; i++) {
+    if (Math.abs(slopes[i]) > Math.abs(maxSlope)) {
+      maxSlope = slopes[i];
+      maxIdx = i;
+    }
+  }
+
+  const slopeSign = Math.sign(maxSlope) || 1;
+  const startThreshold = Math.abs(maxSlope) * 0.35;
+  let startIdx = maxIdx;
+
+  while (startIdx > 0) {
+    const prevSlope = slopes[startIdx - 1];
+    if (
+      Math.sign(prevSlope) !== slopeSign ||
+      Math.abs(prevSlope) < startThreshold
+    ) {
+      break;
+    }
+    startIdx -= 1;
+  }
+
+  return startIdx;
+};
+
+const findLargestJumpStart = (t, signal) => {
+  if (
+    !Array.isArray(t) ||
+    !Array.isArray(signal) ||
+    t.length < 3 ||
+    t.length !== signal.length
+  ) {
+    return null;
+  }
+
+  const smoothSignal = savitzkyGolay(signal, 11, 2);
+  const n = smoothSignal.length;
+
+  const headCount = Math.max(20, Math.floor(n * 0.05));
+  const baseline =
+    smoothSignal.slice(0, headCount).reduce((sum, v) => sum + v, 0) / headCount;
+  const minVal = smoothSignal.reduce((min, v) => Math.min(min, v), baseline);
+  const amplitude = baseline - minVal;
+
+  let startIdx = null;
+  if (amplitude > 0) {
+    const threshold = baseline - amplitude * 0.15;
+    for (let i = 0; i < n; i++) {
+      if (smoothSignal[i] <= threshold) {
+        startIdx = i;
+        break;
+      }
+    }
+  }
+
+  if (startIdx === null) {
+    startIdx = findJumpByDerivative(t, smoothSignal);
+  }
+
+  if (startIdx === null) return null;
+
+  const windowSamples = Math.max(20, Math.floor(signal.length * 0.02));
+  const leftIdx = Math.max(0, startIdx - windowSamples);
+  const rightIdx = Math.min(signal.length - 1, startIdx + windowSamples);
+  const window =
+    t[rightIdx] - t[leftIdx] > 0 ? t[rightIdx] - t[leftIdx] : 1e-6;
+
+  return {
+    time: t[startIdx],
+    window,
+  };
+};
+
 // -------------------- Подготовка данных для графиков --------------------
 export const generateChartData = (results, options = {}) => {
   const {
@@ -379,6 +464,12 @@ export const generateChartData = (results, options = {}) => {
   };
 
   chartData.intersections = intersectionPoints || [];
+  const interfJumpCenter = findLargestJumpStart(t, interfCorrected);
+  if (interfJumpCenter) {
+    chartData.focusPoints = {
+      interfCenter: interfJumpCenter,
+    };
+  }
 
   return chartData;
 };
