@@ -503,3 +503,92 @@ canvas {
   outline: 2px solid rgba(249, 115, 22, 0.5);
   outline-offset: 2px;
 }
+
+/* ---- SG settings panel ---- */
+.sg-settings {
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 18px;
+  padding: 1.5rem 1.75rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  text-align: left;
+}
+
+.sg-settings h2 {
+  margin: 0 0 1rem 0;
+  font-size: 1.3rem;
+  color: #0f172a;
+}
+
+.sg-settings-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.sg-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.95rem;
+  color: #1e293b;
+  flex: 1;
+}
+
+.sg-input {
+  width: 140px;
+  max-width: 100%;
+  padding: 0.45rem 0.7rem;
+  border-radius: 10px;
+  border: 1.5px solid rgba(148, 163, 184, 0.9);
+  font-size: 0.95rem;
+  color: #0f172a;
+  background: #f8fafc;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.sg-input:focus {
+  outline: none;
+  border-color: rgba(99, 102, 241, 0.9);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.25);
+}
+
+.sg-help {
+  font-size: 0.8rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.sg-apply-btn {
+  align-self: flex-start;
+  margin-top: 0.25rem;
+  padding: 0.55rem 1.4rem;
+  border-radius: 999px;
+  border: none;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  color: #f9fafb;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(22, 163, 74, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.sg-apply-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(22, 163, 74, 0.45);
+}
+
+.sg-apply-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 3px 10px rgba(22, 163, 74, 0.3);
+}
+
+.sg-apply-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+  box-shadow: none;
+}

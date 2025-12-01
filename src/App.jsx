@@ -7,17 +7,26 @@ function App() {
   const [chartData, setChartData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [sgWindow, setSgWindow] = useState(31);
+  const [sgPoly, setSgPoly] = useState(3);
+  const [applyingSmoothing, setApplyingSmoothing] = useState(false);
   const fileInputRef = useRef(null);
+  const lastFileRef = useRef(null);
 
   const handleFileUpload = async (event) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
+    lastFileRef.current = files[0];
+
     setLoading(true);
     setError("");
 
     try {
-      const results = await processCSVData(files[0]);
+      const results = await processCSVData(files[0], {
+        sgWindow,
+        sgPoly,
+      });
       const chartData = generateChartData(results);
       setChartData(chartData);
     } catch (err) {
@@ -43,6 +52,7 @@ function App() {
   const resetFiles = () => {
     setChartData(null);
     setError("");
+    lastFileRef.current = null;
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -56,6 +66,82 @@ function App() {
       </header>
 
       <main className="App-main">
+        {!loading && (
+          <section className="sg-settings">
+            <h2>Параметры сглаживания (Savitzky–Golay)</h2>
+            <div className="sg-settings-row">
+              <label className="sg-label">
+                Размер окна (windowSize):
+                <input
+                  type="number"
+                  min={3}
+                  step={2}
+                  value={sgWindow}
+                  onChange={(e) => {
+                    const val = Math.floor(Number(e.target.value) || 3);
+                    const odd = val % 2 === 0 ? val + 1 : val;
+                    const next = Math.max(3, odd);
+                    setSgWindow(next);
+                  }}
+                  className="sg-input"
+                />
+                <span className="sg-help">
+                  Количество точек в окне фильтра. Должно быть нечётным: больше окно —
+                  сильнее сглаживание и меньше шум, но хуже видны резкие фронты.
+                </span>
+              </label>
+            </div>
+            <div className="sg-settings-row">
+              <label className="sg-label">
+                Порядок полинома (polyOrder):
+                <input
+                  type="number"
+                  min={1}
+                  max={sgWindow - 1}
+                  value={sgPoly}
+                  onChange={(e) => {
+                    const raw = Math.floor(Number(e.target.value) || 1);
+                    const clamped = Math.min(Math.max(1, raw), sgWindow - 1);
+                    setSgPoly(clamped);
+                  }}
+                  className="sg-input"
+                />
+                <span className="sg-help">
+                  Степень полинома аппроксимации внутри окна. Больше порядок — точнее
+                  повторяет форму сигнала, но чувствительнее к шуму.
+                </span>
+              </label>
+            </div>
+            <div className="sg-settings-row">
+              <button
+                type="button"
+                className="sg-apply-btn"
+                disabled={!lastFileRef.current || loading || applyingSmoothing}
+                onClick={async () => {
+                  if (!lastFileRef.current) return;
+                  setApplyingSmoothing(true);
+                  setError("");
+                  try {
+                    const results = await processCSVData(lastFileRef.current, {
+                      sgWindow,
+                      sgPoly,
+                    });
+                    const nextChartData = generateChartData(results);
+                    setChartData(nextChartData);
+                  } catch (err) {
+                    setError(`Ошибка обработки файла: ${err.message}`);
+                    console.error("Processing error:", err);
+                  } finally {
+                    setApplyingSmoothing(false);
+                  }
+                }}
+              >
+                {applyingSmoothing ? "Применение..." : "Применить сглаживание"}
+              </button>
+            </div>
+          </section>
+        )}
+
         {!chartData && !loading && (
           <div
             className="drop-zone"
