@@ -460,42 +460,17 @@ export const generateChartData = (results, options = {}) => {
       tenz,
       interf: results.interf,
       interfCorrected,
-      dudt_interf
+      dudt_interf,
+      t0: results.t0,
+      y0: results.y0
     }
   };
 
   chartData.intersections = intersectionPoints || [];
-  
-  // Скорость (по производной интерферосигнала) в точках пересечения
-  const velocitySeries = [];
-  const displacementSeries = [];
-  if (Array.isArray(intersectionPoints) && intersectionPoints.length > 0) {
-    let idx = 0;
-    let lastTime = intersectionPoints[0].time;
-    let lastVel = 0;
-    let disp = 0;
 
-    for (let k = 0; k < intersectionPoints.length; k++) {
-      const ptTime = intersectionPoints[k].time;
-      while (idx < t.length - 1 && t[idx] < ptTime) {
-        idx++;
-      }
-      const v = dudt_interf[idx] ?? 0;
-      velocitySeries.push({ time: ptTime, value: v });
-
-      if (k > 0) {
-        const dt = ptTime - lastTime;
-        disp += 0.5 * (v + lastVel) * dt;
-      }
-      displacementSeries.push({ time: ptTime, value: disp });
-
-      lastTime = ptTime;
-      lastVel = v;
-    }
-  }
-
-  chartData.velocitySeries = velocitySeries;
-  chartData.displacementSeries = displacementSeries;
+  // Скорость и перемещение будут рассчитываться в ChartComponent от точек пересечения
+  chartData.velocitySeries = [];
+  chartData.displacementSeries = [];
   const interfJumpCenter = findLargestJumpStart(t, interfCorrected);
   if (interfJumpCenter) {
     chartData.focusPoints = {

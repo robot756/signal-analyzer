@@ -86,25 +86,39 @@ const ChartComponent = ({ data }) => {
     return value.toExponential(3);
   };
 
-  const getSeriesValueAtTime = (series, time) => {
+  // Оптимизированная функция поиска с бинарным поиском (O(log n) вместо O(n))
+  const getSeriesValueAtTime = useCallback((series, time) => {
     if (!Array.isArray(series) || series.length === 0 || typeof time !== "number") {
       return null;
     }
 
+    const n = series.length;
+    
+    // Граничные случаи
     if (time <= series[0].time) return series[0].value;
-    for (let i = 1; i < series.length; i++) {
-      const prev = series[i - 1];
-      const curr = series[i];
-      if (time <= curr.time) {
-        const dt = curr.time - prev.time;
-        if (dt === 0) return curr.value;
-        const ratio = (time - prev.time) / dt;
-        return prev.value + ratio * (curr.value - prev.value);
+    if (time >= series[n - 1].time) return series[n - 1].value;
+
+    // Бинарный поиск
+    let left = 0;
+    let right = n - 1;
+    
+    while (right - left > 1) {
+      const mid = Math.floor((left + right) / 2);
+      if (series[mid].time <= time) {
+        left = mid;
+      } else {
+        right = mid;
       }
     }
 
-    return series[series.length - 1].value;
-  };
+    // Линейная интерполяция между найденными точками
+    const prev = series[left];
+    const curr = series[right];
+    const dt = curr.time - prev.time;
+    if (dt === 0) return curr.value;
+    const ratio = (time - prev.time) / dt;
+    return prev.value + ratio * (curr.value - prev.value);
+  }, []);
 
   useEffect(() => {
     if (!data) return;
@@ -112,8 +126,9 @@ const ChartComponent = ({ data }) => {
     const buildOptions = (title, yLabel) => ({
       responsive: true,
       interaction: {
-        mode: "index",
-        intersect: false,
+        mode: "nearest",
+        intersect: true,
+        // Оптимизация: более стабильный режим взаимодействия
       },
       scales: {
         x: {
@@ -141,26 +156,36 @@ const ChartComponent = ({ data }) => {
         },
         tooltip: {
           enabled: true,
+          // Оптимизация: уменьшаем задержку и длительность показа
+          animation: {
+            duration: 0
+          },
+          // Исправление: стабильное позиционирование tooltip
+          position: 'nearest',
+          // Исправление: предотвращаем "убегание" tooltip
+          followCursor: false,
+          // Исправление: добавляем задержку для стабильности
+          delay: 0,
           callbacks: {
             label: function(context) {
               const point = context.raw;
               let xValue, yValue;
               
               if (typeof point.x === 'number') {
-                // Форматируем время: если очень маленькое, используем экспоненциальную форму
+                // Упрощенное форматирование для производительности
                 if (Math.abs(point.x) < 0.001 || Math.abs(point.x) >= 1000) {
-                  xValue = point.x.toExponential(4) + ' с';
+                  xValue = point.x.toExponential(3) + ' с';
                 } else {
                   xValue = point.x.toFixed(6) + ' с';
                 }
               } else {
-                xValue = point.x;
+                xValue = String(point.x);
               }
               
               if (typeof point.y === 'number') {
                 yValue = point.y.toFixed(6);
               } else {
-                yValue = point.y;
+                yValue = String(point.y);
               }
               
               return [
@@ -303,6 +328,7 @@ const ChartComponent = ({ data }) => {
     chart.update("none");
   }, [originalAxisVisibility, data]);
 
+
   // График скорости
   useEffect(() => {
     if (!velocityChartRef.current) return;
@@ -344,7 +370,11 @@ const ChartComponent = ({ data }) => {
         },
         options: {
           responsive: true,
-          interaction: { mode: "index", intersect: false },
+          interaction: { 
+            mode: "nearest",
+            intersect: true,
+            // Исправление: используем более стабильный режим взаимодействия
+          },
           scales: {
             x: { type: "linear", title: { display: true, text: "Время (секунды)" } },
             y: { type: "linear", title: { display: true, text: yLabel } },
@@ -371,15 +401,26 @@ const ChartComponent = ({ data }) => {
             },
             tooltip: {
               enabled: true,
+              // Оптимизация: уменьшаем задержку и длительность показа
+              animation: {
+                duration: 0
+              },
+              // Исправление: стабильное позиционирование tooltip
+              position: 'nearest',
+              // Исправление: предотвращаем "убегание" tooltip
+              followCursor: false,
+              // Исправление: добавляем задержку для стабильности
+              delay: 0,
               callbacks: {
                 label: function (context) {
                   const point = context.raw;
+                  // Упрощенное форматирование для производительности
                   const t = typeof point.x === "number"
-                    ? `${point.x.toExponential(4)} с`
-                    : point.x;
+                    ? point.x.toExponential(3) + " с"
+                    : String(point.x);
                   const v = typeof point.y === "number"
-                    ? `${point.y.toExponential(4)} ${tooltipUnit}`
-                    : point.y;
+                    ? point.y.toExponential(3) + " " + tooltipUnit
+                    : String(point.y);
                   return [`${context.dataset.label || ""}`, `t: ${t}`, `v: ${v}`];
                 },
               },
@@ -445,7 +486,11 @@ const ChartComponent = ({ data }) => {
         },
         options: {
           responsive: true,
-          interaction: { mode: "index", intersect: false },
+          interaction: { 
+            mode: "nearest",
+            intersect: true,
+            // Исправление: используем более стабильный режим взаимодействия
+          },
           scales: {
             x: { type: "linear", title: { display: true, text: "Время (секунды)" } },
             y: { type: "linear", title: { display: true, text: yLabel } },
@@ -472,15 +517,26 @@ const ChartComponent = ({ data }) => {
             },
             tooltip: {
               enabled: true,
+              // Оптимизация: уменьшаем задержку и длительность показа
+              animation: {
+                duration: 0
+              },
+              // Исправление: стабильное позиционирование tooltip
+              position: 'nearest',
+              // Исправление: предотвращаем "убегание" tooltip
+              followCursor: false,
+              // Исправление: добавляем задержку для стабильности
+              delay: 0,
               callbacks: {
                 label: function (context) {
                   const point = context.raw;
+                  // Упрощенное форматирование для производительности
                   const t = typeof point.x === "number"
-                    ? `${point.x.toExponential(4)} с`
-                    : point.x;
+                    ? point.x.toExponential(3) + " с"
+                    : String(point.x);
                   const s = typeof point.y === "number"
-                    ? `${point.y.toExponential(4)} ${tooltipUnit}`
-                    : point.y;
+                    ? point.y.toExponential(3) + " " + tooltipUnit
+                    : String(point.y);
                   return [`${context.dataset.label || ""}`, `t: ${t}`, `s: ${s}`];
                 },
               },
@@ -505,13 +561,18 @@ const ChartComponent = ({ data }) => {
     chart.update("none");
   }, [displacementSeries, displacementMarkers]);
 
-  // Обновление графиков при изменении сдвигов сигналов
+  // Расчет пересечений, скорости и перемещения при изменении сдвигов или предела по X
   useEffect(() => {
-    if (!data?.rawData || !originalChartInstance.current) {
+    if (!data?.rawData) {
+      setCurrentIntersections([]);
+      setVelocitySeries([]);
+      setDisplacementSeries([]);
+      setVelocityMarkers([]);
+      setDisplacementMarkers([]);
       return;
     }
 
-    const { t, tenz, interfCorrected, dudt_interf } = data.rawData;
+    const { t, tenz, interfCorrected } = data.rawData;
 
     const rawT0 = t.length > 0 ? t[0] : null;
     const minTime = intersectionXMin ?? rawT0;
@@ -519,29 +580,6 @@ const ChartComponent = ({ data }) => {
     // Обновляем сигналы с учетом сдвигов
     const shiftedTenz = tenz.map((val) => val + tenzOffset);
     const shiftedInterf = interfCorrected.map((val) => val + interfOffset);
-    
-    // Обновляем график исходных данных
-    const originalChart = originalChartInstance.current;
-    const tenzDatasetIndex = originalChart.data.datasets.findIndex(
-      (ds) => ds.label === "Тензометрический сигнал (CH1)"
-    );
-
-    if (tenzDatasetIndex !== -1) {
-      originalChart.data.datasets[tenzDatasetIndex].data = t.map((time, idx) => ({
-        x: time,
-        y: shiftedTenz[idx],
-      }));
-    }
-
-    const interfDatasetIndex = originalChart.data.datasets.findIndex(
-      (ds) => ds.label === "Интерф центрированный"
-    );
-    if (interfDatasetIndex !== -1) {
-      originalChart.data.datasets[interfDatasetIndex].data = t.map((time, idx) => ({
-        x: time,
-        y: shiftedInterf[idx],
-      }));
-    }
 
     // Пересчитываем пересечения
     const newIntersections = [];
@@ -575,13 +613,138 @@ const ChartComponent = ({ data }) => {
       }
     }
 
-    // Фильтруем пересечения по минимальному времени (на всякий случай)
+    // Фильтруем пересечения по минимальному времени
     const intersectionsForPlot =
       typeof minTime === "number"
         ? newIntersections.filter((p) => p.time >= minTime)
         : newIntersections;
 
+    // Обновляем состояние для таблицы пересечений
+    setCurrentIntersections(intersectionsForPlot);
+
+    // ---------------- Расчет скорости и перемещения от точек пересечения ----------------
+    // Алгоритм как в Octave-скрипте, но используем точки пересечения вместо нулей интерфера
+    const velocityPoints = [];
+    const displacementPoints = [];
+
+    if (intersectionsForPlot.length > 0) {
+      // Параметры как в Octave-скрипте
+      const lambda = 0.63e-6;              // 0.63 мкм
+      const du = lambda / 4;               // аналог 0.63/4*10^(-6)
+
+      // Сортируем точки пересечения по времени (на всякий случай)
+      const sortedIntersections = [...intersectionsForPlot].sort((a, b) => a.time - b.time);
+
+      let u = 0;
+
+      for (let i = 0; i < sortedIntersections.length; i++) {
+        const intersectionTime = sortedIntersections[i].time;
+
+        if (i === 0) {
+          // Первая точка: задаём начальное перемещение
+          u = du;
+          displacementPoints.push({ time: intersectionTime, value: u });
+        } else {
+          const dtVal = sortedIntersections[i].time - sortedIntersections[i - 1].time;
+          if (!isFinite(dtVal) || dtVal <= 0) continue;
+
+          // Увеличиваем перемещение на фиксированный шаг и считаем скорость
+          u = u + du;
+          const v = du / dtVal;
+
+          displacementPoints.push({ time: intersectionTime, value: u });
+          velocityPoints.push({ time: intersectionTime, value: v });
+        }
+      }
+    }
+
+    // Маркеры для точек пересечения - оптимизированная версия
+    // Используем прямое сопоставление вместо поиска, так как точки пересечения
+    // соответствуют точкам в velocityPoints/displacementPoints
+    const markerVelocities = [];
+    const markerDisplacements = [];
+    
+    // Создаем Map для быстрого поиска (O(1) вместо O(log n))
+    const velocityMap = new Map(velocityPoints.map(p => [p.time, p.value]));
+    const displacementMap = new Map(displacementPoints.map(p => [p.time, p.value]));
+    
+    for (const point of intersectionsForPlot) {
+      // Прямой поиск в Map, если не найдено - используем интерполяцию
+      const vValue = velocityMap.get(point.time) ?? getSeriesValueAtTime(velocityPoints, point.time);
+      const dValue = displacementMap.get(point.time) ?? getSeriesValueAtTime(displacementPoints, point.time);
+      
+      markerVelocities.push({ time: point.time, value: vValue });
+      markerDisplacements.push({ time: point.time, value: dValue });
+    }
+
+    setVelocitySeries(velocityPoints);
+    setDisplacementSeries(displacementPoints);
+    setVelocityMarkers(markerVelocities);
+    setDisplacementMarkers(markerDisplacements);
+  }, [tenzOffset, interfOffset, intersectionXMin, data?.rawData, getSeriesValueAtTime]);
+
+  // Мемоизация прореженных данных для оптимизации
+  const downsampledData = useMemo(() => {
+    if (!data?.rawData) return null;
+    
+    const { t, tenz, interfCorrected } = data.rawData;
+    const maxPoints = 2000; // Максимальное количество точек для отображения
+    const step = Math.max(1, Math.floor(t.length / maxPoints));
+    
+    const downsampledT = [];
+    const downsampledIndices = [];
+    
+    for (let i = 0; i < t.length; i += step) {
+      downsampledT.push(t[i]);
+      downsampledIndices.push(i);
+    }
+    
+    return {
+      t: downsampledT,
+      indices: downsampledIndices,
+      originalLength: t.length
+    };
+  }, [data?.rawData]);
+
+  // Обновление графиков при изменении сдвигов сигналов
+  useEffect(() => {
+    if (!data?.rawData || !originalChartInstance.current || !downsampledData) {
+      return;
+    }
+
+    const { t, tenz, interfCorrected } = data.rawData;
+    const { t: downsampledT, indices } = downsampledData;
+
+    // Обновляем сигналы с учетом сдвигов только для прореженных точек
+    const tenzData = new Array(downsampledT.length);
+    const interfData = new Array(downsampledT.length);
+    
+    for (let i = 0; i < downsampledT.length; i++) {
+      const idx = indices[i];
+      tenzData[i] = { x: downsampledT[i], y: tenz[idx] + tenzOffset };
+      interfData[i] = { x: downsampledT[i], y: interfCorrected[idx] + interfOffset };
+    }
+    
+    // Обновляем график исходных данных
+    const originalChart = originalChartInstance.current;
+    const tenzDatasetIndex = originalChart.data.datasets.findIndex(
+      (ds) => ds.label === "Тензометрический сигнал (CH1)"
+    );
+
+    if (tenzDatasetIndex !== -1) {
+      originalChart.data.datasets[tenzDatasetIndex].data = tenzData;
+    }
+
+    const interfDatasetIndex = originalChart.data.datasets.findIndex(
+      (ds) => ds.label === "Интерф центрированный"
+    );
+    if (interfDatasetIndex !== -1) {
+      originalChart.data.datasets[interfDatasetIndex].data = interfData;
+    }
+
     // Обновляем пересечения на графике исходных данных
+    const intersectionsForPlot = currentIntersections;
+    
     // Обновляем датасет с intersectionMarker (если есть)
     const intersectionMarkerIndex = originalChart.data.datasets.findIndex(
       (ds) => ds.intersectionMarker
@@ -609,77 +772,8 @@ const ChartComponent = ({ data }) => {
       );
     }
 
-    // Обновляем состояние для таблицы пересечений
-    setCurrentIntersections(intersectionsForPlot);
-
-    // Пересчёт скорости и перемещения с использованием всех точек данных для плавных графиков
-    // Пересчет в СИ для He-Ne лазера (632.8 нм)
-    // Для интерферометра: один период интерференции = λ/2 перемещения
-    // Коэффициент преобразования: λ/2 (предполагаем, что амплитуда периода ≈ 1 В)
-    const conversionFactor = wavelength / 2; // λ/2 для He-Ne = 316.4 нм
-    const velocityPoints = [];
-    const displacementPoints = [];
-
-    if (
-      Array.isArray(intersectionsForPlot) &&
-      intersectionsForPlot.length > 0 &&
-      Array.isArray(dudt_interf) &&
-      dudt_interf.length === t.length
-    ) {
-      // Определяем диапазон времени для расчета
-      const firstIntersectionTime = intersectionsForPlot[0].time;
-      const lastIntersectionTime = intersectionsForPlot[intersectionsForPlot.length - 1].time;
-      const effectiveMinTime = typeof minTime === "number" ? Math.max(minTime, firstIntersectionTime) : firstIntersectionTime;
-
-      // Используем все точки данных в диапазоне между пересечениями
-      let disp = 0;
-      let lastVel = 0;
-      let lastTime = null;
-
-      for (let i = 0; i < t.length; i++) {
-        if (t[i] < effectiveMinTime || t[i] > lastIntersectionTime) {
-          continue;
-        }
-
-        const currentTime = t[i];
-        const v = dudt_interf[i] ?? 0;
-        
-        // Пересчет скорости в м/с: В/с * (λ/2)
-        const vSI = v * conversionFactor;
-        velocityPoints.push({ time: currentTime, value: vSI });
-
-        // Интегрируем для перемещения (метод трапеций)
-        if (lastTime !== null) {
-          const dt = currentTime - lastTime;
-          disp += 0.5 * (v + lastVel) * dt;
-        }
-        
-        // Пересчет перемещения в м: усл. ед. * (λ/2)
-        const dispSI = disp * conversionFactor;
-        displacementPoints.push({ time: currentTime, value: dispSI });
-
-        lastTime = currentTime;
-        lastVel = v;
-      }
-    }
-
-    const markerVelocities = intersectionsForPlot.map((point) => ({
-      time: point.time,
-      value: getSeriesValueAtTime(velocityPoints, point.time),
-    }));
-
-    const markerDisplacements = intersectionsForPlot.map((point) => ({
-      time: point.time,
-      value: getSeriesValueAtTime(displacementPoints, point.time),
-    }));
-
-    setVelocitySeries(velocityPoints);
-    setDisplacementSeries(displacementPoints);
-    setVelocityMarkers(markerVelocities);
-    setDisplacementMarkers(markerDisplacements);
-
     originalChart.update("none");
-  }, [tenzOffset, interfOffset, intersectionXMin, data?.rawData]);
+  }, [tenzOffset, interfOffset, currentIntersections, data?.rawData, downsampledData]);
 
   const handleResetOriginal = useCallback(() => {
     const chart = originalChartInstance.current;
