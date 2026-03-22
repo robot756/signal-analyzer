@@ -686,10 +686,27 @@ const ChartComponent = ({ data }) => {
     }
 
     // Фильтруем пересечения по минимальному времени
-    const intersectionsForPlot =
+    let intersectionsForPlot =
       typeof minTime === "number"
         ? newIntersections.filter((p) => p.time >= minTime)
-        : newIntersections;
+        : [...newIntersections];
+
+    // Фильтрация близких точек (аналог filterClosePoints из csvProcessor.js)
+    // Минимальная дистанция 100 нс между соседними пересечениями
+    const MIN_INTERSECTION_DISTANCE = 100e-9; // 100 нс
+    if (intersectionsForPlot.length > 1) {
+      intersectionsForPlot.sort((a, b) => a.time - b.time);
+      for (let iter = 0; iter < 10; iter++) {
+        const newFiltered = [intersectionsForPlot[0]];
+        for (let i = 1; i < intersectionsForPlot.length; i++) {
+          if (intersectionsForPlot[i].time - newFiltered[newFiltered.length - 1].time >= MIN_INTERSECTION_DISTANCE) {
+            newFiltered.push(intersectionsForPlot[i]);
+          }
+        }
+        if (newFiltered.length === intersectionsForPlot.length) break;
+        intersectionsForPlot = newFiltered;
+      }
+    }
 
     // Обновляем состояние для таблицы пересечений
     setCurrentIntersections(intersectionsForPlot);
@@ -709,6 +726,26 @@ const ChartComponent = ({ data }) => {
 
       let u = 0;
 
+      // Сначала рассчитываем все скорости для определения медианы и порога выбросов
+      const rawVelocities = [];
+      for (let i = 1; i < sortedIntersections.length; i++) {
+        const dtVal = sortedIntersections[i].time - sortedIntersections[i - 1].time;
+        if (!isFinite(dtVal) || dtVal <= 0) {
+          rawVelocities.push(null);
+        } else {
+          rawVelocities.push(du / dtVal);
+        }
+      }
+
+      // Определяем порог для выбросов: медиана * 5
+      const validVelocities = rawVelocities.filter(v => v !== null && isFinite(v));
+      let velocityThreshold = Infinity;
+      if (validVelocities.length > 2) {
+        const sorted = [...validVelocities].sort((a, b) => a - b);
+        const median = sorted[Math.floor(sorted.length / 2)];
+        velocityThreshold = Math.max(median * 5, 1); // минимум 1 м/с порог
+      }
+
       for (let i = 0; i < sortedIntersections.length; i++) {
         const intersectionTime = sortedIntersections[i].time;
 
@@ -717,15 +754,18 @@ const ChartComponent = ({ data }) => {
           u = du;
           displacementPoints.push({ time: intersectionTime, value: u });
         } else {
-          const dtVal = sortedIntersections[i].time - sortedIntersections[i - 1].time;
-          if (!isFinite(dtVal) || dtVal <= 0) continue;
+          const v = rawVelocities[i - 1];
+          if (v === null || !isFinite(v)) continue;
+
+          // Пропускаем выбросы скорости
+          if (Math.abs(v) > velocityThreshold) continue;
 
           // Увеличиваем перемещение на фиксированный шаг и считаем скорость
           u = u + du;
-          const v = du / dtVal;
+          const v_val = v;
 
           displacementPoints.push({ time: intersectionTime, value: u });
-          velocityPoints.push({ time: intersectionTime, value: v });
+          velocityPoints.push({ time: intersectionTime, value: v_val });
         }
       }
     }
