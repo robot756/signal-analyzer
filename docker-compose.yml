@@ -1,0 +1,18 @@
+services:
+  react:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: react-app
+    restart: unless-stopped
+    ports:
+      # Проброс портов для доступа из сети
+      # Формат: "хост:контейнер" - 0.0.0.0 означает доступ со всех интерфейсов
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:3000:80"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
