@@ -61,6 +61,7 @@ const ChartComponent = ({ data }) => {
   const [displacementSeries, setDisplacementSeries] = useState([]);
   const [velocityMarkers, setVelocityMarkers] = useState([]);
   const [displacementMarkers, setDisplacementMarkers] = useState([]);
+  const [extremumPoints, setExtremumPoints] = useState([]); // Точки экстремумов интерферограммы
   // Используем СИ для He-Ne лазера (632.8 нм)
   const useSIUnits = true;
   const wavelength = 632.8e-9; // Длина волны He-Ne лазера в метрах
@@ -663,6 +664,7 @@ const ChartComponent = ({ data }) => {
       setDisplacementSeries([]);
       setVelocityMarkers([]);
       setDisplacementMarkers([]);
+      setExtremumPoints([]);
       return;
     }
 
@@ -818,6 +820,25 @@ const ChartComponent = ({ data }) => {
       }
     }
 
+    // ---------------- Поиск экстремумов интерферограммы ----------------
+    const extremums = [];
+    const shiftedInterfFull = interfCorrected.map((val) => val + interfOffset);
+    for (let i = 1; i < t.length - 1; i++) {
+      const prev = shiftedInterfFull[i - 1];
+      const curr = shiftedInterfFull[i];
+      const next = shiftedInterfFull[i + 1];
+
+      if (typeof minTime === "number" && t[i] < minTime) continue;
+
+      if (curr > prev && curr > next) {
+        extremums.push({ time: t[i], value: curr, type: "max" });
+      } else if (curr < prev && curr < next) {
+        extremums.push({ time: t[i], value: curr, type: "min" });
+      }
+    }
+
+    setExtremumPoints(extremums);
+
     setVelocitySeries(velocityPoints);
     setDisplacementSeries(displacementPoints);
     setVelocityMarkers(markerVelocities);
@@ -913,8 +934,58 @@ const ChartComponent = ({ data }) => {
       );
     }
 
+    // Обновляем/создаем датасеты экстремумов на original графике
+    const maxPoints = extremumPoints.filter(p => p.type === "max");
+    const minPoints = extremumPoints.filter(p => p.type === "min");
+
+    const LABEL_MAX = "Максимумы интерферограммы";
+    const LABEL_MIN = "Минимумы интерферограммы";
+
+    let maxIdx = originalChart.data.datasets.findIndex(ds => ds.label === LABEL_MAX);
+    let minIdx = originalChart.data.datasets.findIndex(ds => ds.label === LABEL_MIN);
+
+    const maxData = maxPoints.map(p => ({ x: p.time, y: p.value }));
+    const minData = minPoints.map(p => ({ x: p.time, y: p.value }));
+
+    if (maxIdx !== -1) {
+      originalChart.data.datasets[maxIdx].data = maxData;
+    } else if (maxData.length > 0) {
+      originalChart.data.datasets.push({
+        label: LABEL_MAX,
+        data: maxData,
+        showLine: false,
+        pointStyle: "triangle",
+        pointRadius: 6,
+        pointHoverRadius: 8,
+        borderColor: "rgb(220, 38, 38)",
+        backgroundColor: "rgba(220, 38, 38, 0.8)",
+        pointBorderColor: "rgb(220, 38, 38)",
+        pointBackgroundColor: "rgba(220, 38, 38, 0.8)",
+        borderWidth: 2,
+      });
+    }
+
+    if (minIdx !== -1) {
+      originalChart.data.datasets[minIdx].data = minData;
+    } else if (minData.length > 0) {
+      originalChart.data.datasets.push({
+        label: LABEL_MIN,
+        data: minData,
+        showLine: false,
+        pointStyle: "triangle",
+        rotation: 180,
+        pointRadius: 6,
+        pointHoverRadius: 8,
+        borderColor: "rgb(37, 99, 235)",
+        backgroundColor: "rgba(37, 99, 235, 0.8)",
+        pointBorderColor: "rgb(37, 99, 235)",
+        pointBackgroundColor: "rgba(37, 99, 235, 0.8)",
+        borderWidth: 2,
+      });
+    }
+
     originalChart.update("none");
-  }, [tenzOffset, interfOffset, currentIntersections, data?.rawData, downsampledData]);
+  }, [tenzOffset, interfOffset, currentIntersections, extremumPoints, data?.rawData, downsampledData]);
 
   const handleResetOriginal = useCallback(() => {
     const chart = originalChartInstance.current;
@@ -1316,6 +1387,40 @@ const ChartComponent = ({ data }) => {
                     </tr>
                   );
                 })}
+              </tbody>
+            </table>
+          </div>
+        </aside>
+      )}
+      {extremumPoints.length > 0 && (
+        <aside className="intersection-panel">
+          <div className="intersection-panel__header">
+            <span className="chart-chip" style={{ backgroundColor: "rgba(220, 38, 38, 0.15)", color: "rgb(220, 38, 38)", border: "1px solid rgb(220, 38, 38)" }}>
+              Экстремумы интерферограммы ({extremumPoints.length})
+            </span>
+            <p>Точки максимумов и минимумов интерферосигнала</p>
+          </div>
+          <div className="intersection-table-wrapper">
+            <table className="intersection-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Тип</th>
+                  <th>Время (с)</th>
+                  <th>Значение (В)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {extremumPoints.map((point, idx) => (
+                  <tr key={`ext-${point.time}-${idx}`}>
+                    <td>{idx + 1}</td>
+                    <td style={{ color: point.type === "max" ? "rgb(220, 38, 38)" : "rgb(37, 99, 235)", fontWeight: 600 }}>
+                      {point.type === "max" ? "MAX" : "MIN"}
+                    </td>
+                    <td>{formatTime(point.time)}</td>
+                    <td>{formatSignal(point.value)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
