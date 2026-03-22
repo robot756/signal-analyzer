@@ -821,23 +821,77 @@ const ChartComponent = ({ data }) => {
     }
 
     // ---------------- Поиск экстремумов интерферограммы ----------------
-    const extremums = [];
+    // Находим все локальные экстремумы на сдвинутом интерферосигнале
     const shiftedInterfFull = interfCorrected.map((val) => val + interfOffset);
+
+    // Определяем амплитуду сигнала для порога значимости
+    let sigMin = Infinity, sigMax = -Infinity;
+    for (let i = 0; i < shiftedInterfFull.length; i++) {
+      if (shiftedInterfFull[i] < sigMin) sigMin = shiftedInterfFull[i];
+      if (shiftedInterfFull[i] > sigMax) sigMax = shiftedInterfFull[i];
+    }
+    const sigAmplitude = sigMax - sigMin;
+    const minProminence = sigAmplitude * 0.1; // Минимальная высота пика (10% от амплитуды)
+
+    // Сначала находим ВСЕ локальные экстремумы
+    const rawExtremums = [];
     for (let i = 1; i < t.length - 1; i++) {
+      if (typeof minTime === "number" && t[i] < minTime) continue;
+
       const prev = shiftedInterfFull[i - 1];
       const curr = shiftedInterfFull[i];
       const next = shiftedInterfFull[i + 1];
 
-      if (typeof minTime === "number" && t[i] < minTime) continue;
-
-      if (curr > prev && curr > next) {
-        extremums.push({ time: t[i], value: curr, type: "max" });
-      } else if (curr < prev && curr < next) {
-        extremums.push({ time: t[i], value: curr, type: "min" });
+      if (curr > prev && curr >= next) {
+        rawExtremums.push({ idx: i, time: t[i], value: curr, type: "max" });
+      } else if (curr < prev && curr <= next) {
+        rawExtremums.push({ idx: i, time: t[i], value: curr, type: "min" });
       }
     }
 
-    setExtremumPoints(extremums);
+    // Фильтруем: оставляем только значимые пики
+    // Между двумя соседними MAX должен быть MIN (и наоборот) — берём самый большой MAX и самый маленький MIN
+    const significantExtremums = [];
+    let lastType = null;
+    let candidate = null;
+
+    for (const ext of rawExtremums) {
+      if (ext.type !== lastType) {
+        // Тип сменился — сохраняем предыдущего кандидата (если есть и значим)
+        if (candidate) {
+          significantExtremums.push(candidate);
+        }
+        candidate = ext;
+        lastType = ext.type;
+      } else {
+        // Тот же тип — выбираем лучший кандидат
+        if (ext.type === "max" && ext.value > candidate.value) {
+          candidate = ext;
+        } else if (ext.type === "min" && ext.value < candidate.value) {
+          candidate = ext;
+        }
+      }
+    }
+    if (candidate) {
+      significantExtremums.push(candidate);
+    }
+
+    // Фильтруем по значимости (prominence): разница между соседними макс и мин
+    const finalExtremums = [];
+    for (let i = 0; i < significantExtremums.length; i++) {
+      if (i === 0) {
+        finalExtremums.push(significantExtremums[i]);
+        continue;
+      }
+      const prev = significantExtremums[i - 1];
+      const curr = significantExtremums[i];
+      const diff = Math.abs(curr.value - prev.value);
+      if (diff >= minProminence) {
+        finalExtremums.push(curr);
+      }
+    }
+
+    setExtremumPoints(finalExtremums);
 
     setVelocitySeries(velocityPoints);
     setDisplacementSeries(displacementPoints);
