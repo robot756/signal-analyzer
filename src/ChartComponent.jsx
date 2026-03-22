@@ -708,15 +708,9 @@ const ChartComponent = ({ data }) => {
       }
     }
 
-    // Убираем первую изолированную точку, если она далеко от основной группы
-    // (разрыв создаёт визуальный артефакт на графиках)
+    // Убираем первую точку пересечения — она создаёт разрыв на графиках
     if (intersectionsForPlot.length > 2) {
-      const gap01 = intersectionsForPlot[1].time - intersectionsForPlot[0].time;
-      const gap12 = intersectionsForPlot[2].time - intersectionsForPlot[1].time;
-      // Если первый промежуток в 3+ раза больше второго — первая точка изолирована
-      if (gap01 > gap12 * 3) {
-        intersectionsForPlot = intersectionsForPlot.slice(1);
-      }
+      intersectionsForPlot = intersectionsForPlot.slice(1);
     }
 
     // Обновляем состояние для таблицы пересечений
