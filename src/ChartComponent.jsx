@@ -304,10 +304,32 @@ const ChartComponent = ({ data }) => {
         data?.rawData?.t && data.rawData.t.length > 0 ? data.rawData.t[0] : null;
       const minTime = intersectionXMin ?? rawT0;
       const base = data.intersections;
-      const filtered =
+      let filtered =
         typeof minTime === "number"
           ? base.filter((p) => p.time >= minTime)
-          : base;
+          : [...base];
+
+      // Фильтрация близких точек (минимальная дистанция 100 нс)
+      const MIN_DIST = 100e-9;
+      if (filtered.length > 1) {
+        filtered.sort((a, b) => a.time - b.time);
+        for (let iter = 0; iter < 10; iter++) {
+          const nf = [filtered[0]];
+          for (let i = 1; i < filtered.length; i++) {
+            if (filtered[i].time - nf[nf.length - 1].time >= MIN_DIST) {
+              nf.push(filtered[i]);
+            }
+          }
+          if (nf.length === filtered.length) break;
+          filtered = nf;
+        }
+      }
+
+      // Убираем первую точку пересечения — она создаёт разрыв на графиках
+      if (filtered.length > 2) {
+        filtered = filtered.slice(1);
+      }
+
       setCurrentIntersections(filtered);
     }
   }, [data, intersectionXMin]);
