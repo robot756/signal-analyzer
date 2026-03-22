@@ -823,106 +823,58 @@ const ChartComponent = ({ data }) => {
     }
 
     // ---------------- Поиск экстремумов интерферограммы ----------------
-    // Находим все локальные экстремумы на сдвинутом интерферосигнале
+    // Подход: между каждыми двумя соседними нулевыми пересечениями
+    // интерферограммы есть ровно один экстремум (пик или впадина).
     const shiftedInterfFull = interfCorrected.map((val) => val + interfOffset);
 
-    // Определяем амплитуду сигнала для порога значимости
-    let sigMin = Infinity, sigMax = -Infinity;
-    for (let i = 0; i < shiftedInterfFull.length; i++) {
-      if (shiftedInterfFull[i] < sigMin) sigMin = shiftedInterfFull[i];
-      if (shiftedInterfFull[i] > sigMax) sigMax = shiftedInterfFull[i];
-    }
-    const sigAmplitude = sigMax - sigMin;
-    const minProminence = sigAmplitude * 0.1; // Минимальная высота пика (10% от амплитуды)
-
-    // Поиск истинного экстремума в окрестности индекса centerIdx
-    // Ищем в окне ±halfWin точек, находим лучший, затем параболическая интерполяция
-    const halfWin = Math.max(5, Math.floor(t.length / 5000)); // адаптивное окно
-    const findTruePeak = (centerIdx, type) => {
-      const lo = Math.max(1, centerIdx - halfWin);
-      const hi = Math.min(t.length - 2, centerIdx + halfWin);
-      let bestIdx = centerIdx;
-      let bestVal = shiftedInterfFull[centerIdx];
-      for (let j = lo; j <= hi; j++) {
-        if (type === "max" && shiftedInterfFull[j] > bestVal) {
-          bestVal = shiftedInterfFull[j];
-          bestIdx = j;
-        } else if (type === "min" && shiftedInterfFull[j] < bestVal) {
-          bestVal = shiftedInterfFull[j];
-          bestIdx = j;
-        }
-      }
-      // Параболическая интерполяция по 3 точкам вокруг найденного пика
-      const y1 = shiftedInterfFull[bestIdx - 1];
-      const y2 = shiftedInterfFull[bestIdx];
-      const y3 = shiftedInterfFull[bestIdx + 1];
-      const denom = y1 - 2 * y2 + y3;
-      if (Math.abs(denom) > 1e-30) {
-        const dx = 0.5 * (y1 - y3) / denom;
-        const dt = t[bestIdx + 1] - t[bestIdx];
-        return { time: t[bestIdx] + dx * dt, value: y2 - 0.25 * (y1 - y3) * dx };
-      }
-      return { time: t[bestIdx], value: y2 };
-    };
-
-    // Сначала находим ВСЕ локальные экстремумы
-    const rawExtremums = [];
-    for (let i = 1; i < t.length - 1; i++) {
-      if (typeof minTime === "number" && t[i] < minTime) continue;
-
-      const prev = shiftedInterfFull[i - 1];
-      const curr = shiftedInterfFull[i];
-      const next = shiftedInterfFull[i + 1];
-
-      if (curr > prev && curr >= next) {
-        const peak = findTruePeak(i, "max");
-        rawExtremums.push({ idx: i, time: peak.time, value: peak.value, type: "max" });
-      } else if (curr < prev && curr <= next) {
-        const peak = findTruePeak(i, "min");
-        rawExtremums.push({ idx: i, time: peak.time, value: peak.value, type: "min" });
+    // 1. Находим нулевые пересечения сдвинутого интерферосигнала
+    const zeroCrossings = []; // индексы, где сигнал меняет знак
+    for (let i = 1; i < shiftedInterfFull.length; i++) {
+      if (shiftedInterfFull[i - 1] * shiftedInterfFull[i] < 0) {
+        zeroCrossings.push(i);
       }
     }
 
-    // Фильтруем: оставляем только значимые пики
-    // Между двумя соседними MAX должен быть MIN (и наоборот) — берём самый большой MAX и самый маленький MIN
-    const significantExtremums = [];
-    let lastType = null;
-    let candidate = null;
-
-    for (const ext of rawExtremums) {
-      if (ext.type !== lastType) {
-        // Тип сменился — сохраняем предыдущего кандидата (если есть и значим)
-        if (candidate) {
-          significantExtremums.push(candidate);
-        }
-        candidate = ext;
-        lastType = ext.type;
-      } else {
-        // Тот же тип — выбираем лучший кандидат
-        if (ext.type === "max" && ext.value > candidate.value) {
-          candidate = ext;
-        } else if (ext.type === "min" && ext.value < candidate.value) {
-          candidate = ext;
-        }
-      }
-    }
-    if (candidate) {
-      significantExtremums.push(candidate);
-    }
-
-    // Фильтруем по значимости (prominence): разница между соседними макс и мин
+    // 2. Между каждой парой нулевых пересечений ищем max или min
     const finalExtremums = [];
-    for (let i = 0; i < significantExtremums.length; i++) {
-      if (i === 0) {
-        finalExtremums.push(significantExtremums[i]);
-        continue;
+    for (let z = 0; z < zeroCrossings.length - 1; z++) {
+      const startIdx = zeroCrossings[z];
+      const endIdx = zeroCrossings[z + 1];
+
+      // Находим индекс с максимальным абсолютным значением в этом сегменте
+      let bestIdx = startIdx;
+      let bestAbsVal = Math.abs(shiftedInterfFull[startIdx]);
+      for (let j = startIdx + 1; j < endIdx; j++) {
+        const absVal = Math.abs(shiftedInterfFull[j]);
+        if (absVal > bestAbsVal) {
+          bestAbsVal = absVal;
+          bestIdx = j;
+        }
       }
-      const prev = significantExtremums[i - 1];
-      const curr = significantExtremums[i];
-      const diff = Math.abs(curr.value - prev.value);
-      if (diff >= minProminence) {
-        finalExtremums.push(curr);
+
+      // Определяем тип: max (положительный) или min (отрицательный)
+      const type = shiftedInterfFull[bestIdx] > 0 ? "max" : "min";
+
+      // Параболическая интерполяция для субсэмпловой точности
+      let peakTime = t[bestIdx];
+      let peakValue = shiftedInterfFull[bestIdx];
+      if (bestIdx > 0 && bestIdx < shiftedInterfFull.length - 1) {
+        const y1 = shiftedInterfFull[bestIdx - 1];
+        const y2 = shiftedInterfFull[bestIdx];
+        const y3 = shiftedInterfFull[bestIdx + 1];
+        const denom = y1 - 2 * y2 + y3;
+        if (Math.abs(denom) > 1e-30) {
+          const dx = 0.5 * (y1 - y3) / denom;
+          const dt = t[bestIdx + 1] - t[bestIdx];
+          peakTime = t[bestIdx] + dx * dt;
+          peakValue = y2 - 0.25 * (y1 - y3) * dx;
+        }
       }
+
+      // Фильтр по времени
+      if (typeof minTime === "number" && peakTime < minTime) continue;
+
+      finalExtremums.push({ time: peakTime, value: peakValue, type });
     }
 
     setExtremumPoints(finalExtremums);
