@@ -346,40 +346,83 @@ const ChartComponent = ({ data }) => {
               label: "Скорость в точках пересечений",
               data: velocitySeries.map((p) => ({ x: p.time, y: p.value })),
               borderColor: "rgb(34,197,94)",
-              backgroundColor: "rgba(34,197,94,0.25)",
+              backgroundColor: "rgba(34,197,94,0.08)",
+              fill: true,
               showLine: true,
-              pointRadius: 0, // Скрываем точки для более плавного вида
-              pointHoverRadius: 4,
-              tension: 0.4, // Сглаживание кривой (0-1, больше = плавнее)
-              cubicInterpolationMode: 'monotone', // Плавная интерполяция
-              borderWidth: 2,
+              pointRadius: 5,
+              pointHoverRadius: 7,
+              pointBackgroundColor: "rgb(34,197,94)",
+              pointBorderColor: "#fff",
+              pointBorderWidth: 2,
+              tension: 0.3,
+              cubicInterpolationMode: 'monotone',
+              borderWidth: 2.5,
             },
             {
               label: "Скорость (точки пересечений)",
               data: velocityMarkers.map((p) => ({ x: p.time, y: p.value })),
               borderColor: "rgb(34,197,94)",
-              backgroundColor: "rgba(34,197,94,0.9)",
+              backgroundColor: "rgb(34,197,94)",
               showLine: false,
-              pointRadius: 4,
-              pointHoverRadius: 6,
+              pointRadius: 6,
+              pointHoverRadius: 8,
               pointBackgroundColor: "rgb(34,197,94)",
               pointBorderColor: "#fff",
+              pointBorderWidth: 2,
               borderWidth: 0,
             },
           ],
         },
         options: {
           responsive: true,
-          interaction: { 
+          interaction: {
             mode: "nearest",
             intersect: true,
-            // Исправление: используем более стабильный режим взаимодействия
           },
           scales: {
-            x: { type: "linear", title: { display: true, text: "Время (секунды)" } },
-            y: { type: "linear", title: { display: true, text: yLabel } },
+            x: {
+              type: "linear",
+              title: { display: true, text: "Время (секунды)", font: { size: 13, weight: 'bold' } },
+              ticks: {
+                callback: function(value) {
+                  return value.toExponential(4).replace('.', ',').replace('e+', 'E+').replace('e-', 'E-');
+                },
+                font: { size: 11 },
+                maxRotation: 0,
+              },
+              grid: { color: 'rgba(0,0,0,0.08)' },
+            },
+            y: {
+              type: "linear",
+              title: { display: true, text: yLabel, font: { size: 13, weight: 'bold' } },
+              ticks: {
+                callback: function(value) {
+                  return value.toFixed(2).replace('.', ',');
+                },
+                font: { size: 11 },
+              },
+              grid: { color: 'rgba(0,0,0,0.08)' },
+            },
           },
           plugins: {
+            title: {
+              display: true,
+              text: 'Скорость от времени',
+              font: { size: 18, weight: 'bold' },
+              padding: { top: 10, bottom: 15 },
+              color: '#1a1a1a',
+            },
+            legend: {
+              display: true,
+              position: 'top',
+              labels: {
+                usePointStyle: false,
+                boxWidth: 20,
+                boxHeight: 14,
+                padding: 15,
+                font: { size: 12 },
+              },
+            },
             zoom: {
               pan: {
                 enabled: true,
@@ -401,25 +444,18 @@ const ChartComponent = ({ data }) => {
             },
             tooltip: {
               enabled: true,
-              // Оптимизация: уменьшаем задержку и длительность показа
-              animation: {
-                duration: 0
-              },
-              // Исправление: стабильное позиционирование tooltip
+              animation: { duration: 0 },
               position: 'nearest',
-              // Исправление: предотвращаем "убегание" tooltip
               followCursor: false,
-              // Исправление: добавляем задержку для стабильности
               delay: 0,
               callbacks: {
                 label: function (context) {
                   const point = context.raw;
-                  // Упрощенное форматирование для производительности
                   const t = typeof point.x === "number"
-                    ? point.x.toExponential(3) + " с"
+                    ? point.x.toExponential(4).replace('.', ',') + " с"
                     : String(point.x);
                   const v = typeof point.y === "number"
-                    ? point.y.toExponential(3) + " " + tooltipUnit
+                    ? point.y.toExponential(4).replace('.', ',') + " " + tooltipUnit
                     : String(point.y);
                   return [`${context.dataset.label || ""}`, `t: ${t}`, `v: ${v}`];
                 },
@@ -462,40 +498,83 @@ const ChartComponent = ({ data }) => {
               label: "Перемещение в точках пересечений",
               data: displacementSeries.map((p) => ({ x: p.time, y: p.value })),
               borderColor: "rgb(59,130,246)",
-              backgroundColor: "rgba(59,130,246,0.25)",
+              backgroundColor: "rgba(59,130,246,0.08)",
+              fill: true,
               showLine: true,
-              pointRadius: 0, // Скрываем точки для более плавного вида
-              pointHoverRadius: 4,
-              tension: 0.4, // Сглаживание кривой (0-1, больше = плавнее)
-              cubicInterpolationMode: 'monotone', // Плавная интерполяция
-              borderWidth: 2,
+              pointRadius: 5,
+              pointHoverRadius: 7,
+              pointBackgroundColor: "rgb(59,130,246)",
+              pointBorderColor: "#fff",
+              pointBorderWidth: 2,
+              tension: 0.3,
+              cubicInterpolationMode: 'monotone',
+              borderWidth: 2.5,
             },
             {
               label: "Перемещение (точки пересечений)",
               data: displacementMarkers.map((p) => ({ x: p.time, y: p.value })),
               borderColor: "rgb(59,130,246)",
-              backgroundColor: "rgba(59,130,246,0.9)",
+              backgroundColor: "rgb(59,130,246)",
               showLine: false,
-              pointRadius: 4,
-              pointHoverRadius: 6,
+              pointRadius: 6,
+              pointHoverRadius: 8,
               pointBackgroundColor: "rgb(59,130,246)",
               pointBorderColor: "#fff",
+              pointBorderWidth: 2,
               borderWidth: 0,
             },
           ],
         },
         options: {
           responsive: true,
-          interaction: { 
+          interaction: {
             mode: "nearest",
             intersect: true,
-            // Исправление: используем более стабильный режим взаимодействия
           },
           scales: {
-            x: { type: "linear", title: { display: true, text: "Время (секунды)" } },
-            y: { type: "linear", title: { display: true, text: yLabel } },
+            x: {
+              type: "linear",
+              title: { display: true, text: "Время (секунды)", font: { size: 13, weight: 'bold' } },
+              ticks: {
+                callback: function(value) {
+                  return value.toExponential(4).replace('.', ',').replace('e+', 'E+').replace('e-', 'E-');
+                },
+                font: { size: 11 },
+                maxRotation: 0,
+              },
+              grid: { color: 'rgba(0,0,0,0.08)' },
+            },
+            y: {
+              type: "linear",
+              title: { display: true, text: yLabel, font: { size: 13, weight: 'bold' } },
+              ticks: {
+                callback: function(value) {
+                  return value.toExponential(7).replace('.', ',').replace('e+', 'E+').replace('e-', 'E-');
+                },
+                font: { size: 11 },
+              },
+              grid: { color: 'rgba(0,0,0,0.08)' },
+            },
           },
           plugins: {
+            title: {
+              display: true,
+              text: 'Перемещение от времени',
+              font: { size: 18, weight: 'bold' },
+              padding: { top: 10, bottom: 15 },
+              color: '#1a1a1a',
+            },
+            legend: {
+              display: true,
+              position: 'top',
+              labels: {
+                usePointStyle: false,
+                boxWidth: 20,
+                boxHeight: 14,
+                padding: 15,
+                font: { size: 12 },
+              },
+            },
             zoom: {
               pan: {
                 enabled: true,
@@ -517,25 +596,18 @@ const ChartComponent = ({ data }) => {
             },
             tooltip: {
               enabled: true,
-              // Оптимизация: уменьшаем задержку и длительность показа
-              animation: {
-                duration: 0
-              },
-              // Исправление: стабильное позиционирование tooltip
+              animation: { duration: 0 },
               position: 'nearest',
-              // Исправление: предотвращаем "убегание" tooltip
               followCursor: false,
-              // Исправление: добавляем задержку для стабильности
               delay: 0,
               callbacks: {
                 label: function (context) {
                   const point = context.raw;
-                  // Упрощенное форматирование для производительности
                   const t = typeof point.x === "number"
-                    ? point.x.toExponential(3) + " с"
+                    ? point.x.toExponential(4).replace('.', ',') + " с"
                     : String(point.x);
                   const s = typeof point.y === "number"
-                    ? point.y.toExponential(3) + " " + tooltipUnit
+                    ? point.y.toExponential(4).replace('.', ',') + " " + tooltipUnit
                     : String(point.y);
                   return [`${context.dataset.label || ""}`, `t: ${t}`, `s: ${s}`];
                 },
@@ -1134,14 +1206,12 @@ const ChartComponent = ({ data }) => {
 
       {velocitySeries.length > 0 && (
         <section className="chart-section">
-          <h3>Скорость от времени</h3>
           <canvas ref={velocityChartRef} width="800" height="280"></canvas>
         </section>
       )}
 
       {displacementSeries.length > 0 && (
         <section className="chart-section">
-          <h3>Перемещение от времени</h3>
           <canvas ref={displacementChartRef} width="800" height="280"></canvas>
         </section>
       )}
