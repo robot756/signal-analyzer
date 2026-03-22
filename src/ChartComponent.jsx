@@ -62,6 +62,8 @@ const ChartComponent = ({ data }) => {
   const [velocityMarkers, setVelocityMarkers] = useState([]);
   const [displacementMarkers, setDisplacementMarkers] = useState([]);
   const [extremumPoints, setExtremumPoints] = useState([]); // Точки экстремумов интерферограммы
+  const [showExtremumMax, setShowExtremumMax] = useState(true);
+  const [showExtremumMin, setShowExtremumMin] = useState(true);
   // Используем СИ для He-Ne лазера (632.8 нм)
   const useSIUnits = true;
   const wavelength = 632.8e-9; // Длина волны He-Ne лазера в метрах
@@ -998,48 +1000,53 @@ const ChartComponent = ({ data }) => {
     let maxIdx = originalChart.data.datasets.findIndex(ds => ds.label === LABEL_MAX);
     let minIdx = originalChart.data.datasets.findIndex(ds => ds.label === LABEL_MIN);
 
-    const maxData = maxPoints.map(p => ({ x: p.time, y: p.value }));
-    const minData = minPoints.map(p => ({ x: p.time, y: p.value }));
+    const maxData = showExtremumMax ? maxPoints.map(p => ({ x: p.time, y: p.value })) : [];
+    const minData = showExtremumMin ? minPoints.map(p => ({ x: p.time, y: p.value })) : [];
+
+    const maxDatasetDef = {
+      label: LABEL_MAX,
+      data: maxData,
+      showLine: false,
+      pointStyle: "circle",
+      pointRadius: 4,
+      pointHoverRadius: 6,
+      borderColor: "rgb(220, 38, 38)",
+      backgroundColor: "rgba(220, 38, 38, 0.7)",
+      pointBorderColor: "#fff",
+      pointBackgroundColor: "rgb(220, 38, 38)",
+      pointBorderWidth: 1.5,
+      borderWidth: 0,
+    };
+
+    const minDatasetDef = {
+      label: LABEL_MIN,
+      data: minData,
+      showLine: false,
+      pointStyle: "circle",
+      pointRadius: 4,
+      pointHoverRadius: 6,
+      borderColor: "rgb(37, 99, 235)",
+      backgroundColor: "rgba(37, 99, 235, 0.7)",
+      pointBorderColor: "#fff",
+      pointBackgroundColor: "rgb(37, 99, 235)",
+      pointBorderWidth: 1.5,
+      borderWidth: 0,
+    };
 
     if (maxIdx !== -1) {
       originalChart.data.datasets[maxIdx].data = maxData;
-    } else if (maxData.length > 0) {
-      originalChart.data.datasets.push({
-        label: LABEL_MAX,
-        data: maxData,
-        showLine: false,
-        pointStyle: "triangle",
-        pointRadius: 6,
-        pointHoverRadius: 8,
-        borderColor: "rgb(220, 38, 38)",
-        backgroundColor: "rgba(220, 38, 38, 0.8)",
-        pointBorderColor: "rgb(220, 38, 38)",
-        pointBackgroundColor: "rgba(220, 38, 38, 0.8)",
-        borderWidth: 2,
-      });
+    } else {
+      originalChart.data.datasets.push(maxDatasetDef);
     }
 
     if (minIdx !== -1) {
       originalChart.data.datasets[minIdx].data = minData;
-    } else if (minData.length > 0) {
-      originalChart.data.datasets.push({
-        label: LABEL_MIN,
-        data: minData,
-        showLine: false,
-        pointStyle: "triangle",
-        rotation: 180,
-        pointRadius: 6,
-        pointHoverRadius: 8,
-        borderColor: "rgb(37, 99, 235)",
-        backgroundColor: "rgba(37, 99, 235, 0.8)",
-        pointBorderColor: "rgb(37, 99, 235)",
-        pointBackgroundColor: "rgba(37, 99, 235, 0.8)",
-        borderWidth: 2,
-      });
+    } else {
+      originalChart.data.datasets.push(minDatasetDef);
     }
 
     originalChart.update("none");
-  }, [tenzOffset, interfOffset, currentIntersections, extremumPoints, data?.rawData, downsampledData]);
+  }, [tenzOffset, interfOffset, currentIntersections, extremumPoints, showExtremumMax, showExtremumMin, data?.rawData, downsampledData]);
 
   const handleResetOriginal = useCallback(() => {
     const chart = originalChartInstance.current;
@@ -1391,6 +1398,42 @@ const ChartComponent = ({ data }) => {
                 <span className="axis-toggle-btn__label">
                   {intersectionDataset.label}
                 </span>
+              </button>
+            )}
+            {extremumPoints.length > 0 && (
+              <button
+                type="button"
+                className={`axis-toggle-btn ${showExtremumMax ? "axis-toggle-btn--active" : ""}`}
+                onClick={() => setShowExtremumMax(v => !v)}
+                aria-pressed={showExtremumMax}
+              >
+                <span
+                  className="axis-toggle-btn__indicator"
+                  style={{
+                    borderColor: "rgb(220, 38, 38)",
+                    backgroundColor: showExtremumMax ? "rgb(220, 38, 38)" : "transparent",
+                  }}
+                  aria-hidden="true"
+                />
+                <span className="axis-toggle-btn__label">Максимумы</span>
+              </button>
+            )}
+            {extremumPoints.length > 0 && (
+              <button
+                type="button"
+                className={`axis-toggle-btn ${showExtremumMin ? "axis-toggle-btn--active" : ""}`}
+                onClick={() => setShowExtremumMin(v => !v)}
+                aria-pressed={showExtremumMin}
+              >
+                <span
+                  className="axis-toggle-btn__indicator"
+                  style={{
+                    borderColor: "rgb(37, 99, 235)",
+                    backgroundColor: showExtremumMin ? "rgb(37, 99, 235)" : "transparent",
+                  }}
+                  aria-hidden="true"
+                />
+                <span className="axis-toggle-btn__label">Минимумы</span>
               </button>
             )}
           </div>
