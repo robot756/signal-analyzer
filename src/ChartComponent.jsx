@@ -835,19 +835,37 @@ const ChartComponent = ({ data }) => {
     const sigAmplitude = sigMax - sigMin;
     const minProminence = sigAmplitude * 0.1; // Минимальная высота пика (10% от амплитуды)
 
-    // Параболическая интерполяция для нахождения точной позиции экстремума
-    // По трём точкам (x1,y1), (x2,y2), (x3,y3) вершина параболы:
-    const parabolicInterp = (x1, y1, x2, y2, x3, y3) => {
-      const denom = (y1 - 2 * y2 + y3);
-      if (Math.abs(denom) < 1e-30) return { time: x2, value: y2 };
-      const dx = 0.5 * (y1 - y3) / denom;
-      const dt = x3 - x2; // шаг по времени (предполагаем равномерный)
-      const peakTime = x2 + dx * dt;
-      const peakValue = y2 - 0.25 * (y1 - y3) * dx;
-      return { time: peakTime, value: peakValue };
+    // Поиск истинного экстремума в окрестности индекса centerIdx
+    // Ищем в окне ±halfWin точек, находим лучший, затем параболическая интерполяция
+    const halfWin = Math.max(5, Math.floor(t.length / 5000)); // адаптивное окно
+    const findTruePeak = (centerIdx, type) => {
+      const lo = Math.max(1, centerIdx - halfWin);
+      const hi = Math.min(t.length - 2, centerIdx + halfWin);
+      let bestIdx = centerIdx;
+      let bestVal = shiftedInterfFull[centerIdx];
+      for (let j = lo; j <= hi; j++) {
+        if (type === "max" && shiftedInterfFull[j] > bestVal) {
+          bestVal = shiftedInterfFull[j];
+          bestIdx = j;
+        } else if (type === "min" && shiftedInterfFull[j] < bestVal) {
+          bestVal = shiftedInterfFull[j];
+          bestIdx = j;
+        }
+      }
+      // Параболическая интерполяция по 3 точкам вокруг найденного пика
+      const y1 = shiftedInterfFull[bestIdx - 1];
+      const y2 = shiftedInterfFull[bestIdx];
+      const y3 = shiftedInterfFull[bestIdx + 1];
+      const denom = y1 - 2 * y2 + y3;
+      if (Math.abs(denom) > 1e-30) {
+        const dx = 0.5 * (y1 - y3) / denom;
+        const dt = t[bestIdx + 1] - t[bestIdx];
+        return { time: t[bestIdx] + dx * dt, value: y2 - 0.25 * (y1 - y3) * dx };
+      }
+      return { time: t[bestIdx], value: y2 };
     };
 
-    // Сначала находим ВСЕ локальные экстремумы с параболической интерполяцией
+    // Сначала находим ВСЕ локальные экстремумы
     const rawExtremums = [];
     for (let i = 1; i < t.length - 1; i++) {
       if (typeof minTime === "number" && t[i] < minTime) continue;
@@ -857,10 +875,10 @@ const ChartComponent = ({ data }) => {
       const next = shiftedInterfFull[i + 1];
 
       if (curr > prev && curr >= next) {
-        const peak = parabolicInterp(t[i-1], prev, t[i], curr, t[i+1], next);
+        const peak = findTruePeak(i, "max");
         rawExtremums.push({ idx: i, time: peak.time, value: peak.value, type: "max" });
       } else if (curr < prev && curr <= next) {
-        const peak = parabolicInterp(t[i-1], prev, t[i], curr, t[i+1], next);
+        const peak = findTruePeak(i, "min");
         rawExtremums.push({ idx: i, time: peak.time, value: peak.value, type: "min" });
       }
     }
