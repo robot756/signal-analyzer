@@ -789,7 +789,10 @@ const ChartComponent = ({ data }) => {
       markerDisplacements.push({ time: point.time, value: dValue });
     }
 
-    setVelocitySeries(velocityPoints);
+    // Убираем первую точку скорости, чтобы не было разрыва на графике
+    const velocityPointsTrimmed = velocityPoints.length > 1 ? velocityPoints.slice(1) : velocityPoints;
+
+    setVelocitySeries(velocityPointsTrimmed);
     setDisplacementSeries(displacementPoints);
     setVelocityMarkers(markerVelocities);
     setDisplacementMarkers(markerDisplacements);
