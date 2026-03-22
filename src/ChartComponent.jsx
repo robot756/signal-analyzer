@@ -808,12 +808,14 @@ const ChartComponent = ({ data }) => {
     const displacementMap = new Map(displacementPoints.map(p => [p.time, p.value]));
     
     for (const point of intersectionsForPlot) {
-      // Прямой поиск в Map, если не найдено - используем интерполяцию
-      const vValue = velocityMap.get(point.time) ?? getSeriesValueAtTime(velocityPoints, point.time);
-      const dValue = displacementMap.get(point.time) ?? getSeriesValueAtTime(displacementPoints, point.time);
-      
-      markerVelocities.push({ time: point.time, value: vValue });
-      markerDisplacements.push({ time: point.time, value: dValue });
+      // Маркер скорости — только если точка реально есть в данных скорости
+      if (velocityMap.has(point.time)) {
+        markerVelocities.push({ time: point.time, value: velocityMap.get(point.time) });
+      }
+      // Маркер перемещения — только если точка реально есть в данных перемещения
+      if (displacementMap.has(point.time)) {
+        markerDisplacements.push({ time: point.time, value: displacementMap.get(point.time) });
+      }
     }
 
     setVelocitySeries(velocityPoints);
