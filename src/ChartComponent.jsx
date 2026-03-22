@@ -835,7 +835,19 @@ const ChartComponent = ({ data }) => {
     const sigAmplitude = sigMax - sigMin;
     const minProminence = sigAmplitude * 0.1; // Минимальная высота пика (10% от амплитуды)
 
-    // Сначала находим ВСЕ локальные экстремумы
+    // Параболическая интерполяция для нахождения точной позиции экстремума
+    // По трём точкам (x1,y1), (x2,y2), (x3,y3) вершина параболы:
+    const parabolicInterp = (x1, y1, x2, y2, x3, y3) => {
+      const denom = (y1 - 2 * y2 + y3);
+      if (Math.abs(denom) < 1e-30) return { time: x2, value: y2 };
+      const dx = 0.5 * (y1 - y3) / denom;
+      const dt = x3 - x2; // шаг по времени (предполагаем равномерный)
+      const peakTime = x2 + dx * dt;
+      const peakValue = y2 - 0.25 * (y1 - y3) * dx;
+      return { time: peakTime, value: peakValue };
+    };
+
+    // Сначала находим ВСЕ локальные экстремумы с параболической интерполяцией
     const rawExtremums = [];
     for (let i = 1; i < t.length - 1; i++) {
       if (typeof minTime === "number" && t[i] < minTime) continue;
@@ -845,9 +857,11 @@ const ChartComponent = ({ data }) => {
       const next = shiftedInterfFull[i + 1];
 
       if (curr > prev && curr >= next) {
-        rawExtremums.push({ idx: i, time: t[i], value: curr, type: "max" });
+        const peak = parabolicInterp(t[i-1], prev, t[i], curr, t[i+1], next);
+        rawExtremums.push({ idx: i, time: peak.time, value: peak.value, type: "max" });
       } else if (curr < prev && curr <= next) {
-        rawExtremums.push({ idx: i, time: t[i], value: curr, type: "min" });
+        const peak = parabolicInterp(t[i-1], prev, t[i], curr, t[i+1], next);
+        rawExtremums.push({ idx: i, time: peak.time, value: peak.value, type: "min" });
       }
     }
 
