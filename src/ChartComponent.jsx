@@ -908,14 +908,31 @@ const ChartComponent = ({ data }) => {
 
     // Обновляем сигналы с учетом сдвигов только для прореженных точек
     const tenzData = new Array(downsampledT.length);
-    const interfData = new Array(downsampledT.length);
-    
+    const interfDataBase = new Array(downsampledT.length);
+
     for (let i = 0; i < downsampledT.length; i++) {
       const idx = indices[i];
       tenzData[i] = { x: downsampledT[i], y: tenz[idx] + tenzOffset };
-      interfData[i] = { x: downsampledT[i], y: interfCorrected[idx] + interfOffset };
+      interfDataBase[i] = { x: downsampledT[i], y: interfCorrected[idx] + interfOffset };
     }
-    
+
+    // Вставляем точки экстремумов в данные линии интерферограммы,
+    // чтобы линия гарантированно проходила через пики и впадины
+    let interfData = interfDataBase;
+    if (extremumPoints.length > 0) {
+      // Собираем Set времён прореженных точек для избежания дубликатов
+      const existingTimes = new Set(downsampledT);
+      const extraPoints = [];
+      for (const ext of extremumPoints) {
+        if (!existingTimes.has(ext.time)) {
+          extraPoints.push({ x: ext.time, y: ext.value });
+        }
+      }
+      if (extraPoints.length > 0) {
+        interfData = [...interfDataBase, ...extraPoints].sort((a, b) => a.x - b.x);
+      }
+    }
+
     // Обновляем график исходных данных
     const originalChart = originalChartInstance.current;
     const tenzDatasetIndex = originalChart.data.datasets.findIndex(
