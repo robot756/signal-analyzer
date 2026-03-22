@@ -875,58 +875,19 @@ const ChartComponent = ({ data }) => {
   }, [tenzOffset, interfOffset, intersectionXMin, data?.rawData, getSeriesValueAtTime]);
 
   // Мемоизация прореженных данных для оптимизации
-  // Используем min-max downsampling: для каждого бакета сохраняем
-  // точки с минимальным и максимальным значением интерферосигнала,
-  // чтобы пики и впадины не пропадали при прореживании.
   const downsampledData = useMemo(() => {
     if (!data?.rawData) return null;
 
     const { t, tenz, interfCorrected } = data.rawData;
-    const maxPoints = 2000; // Максимальное количество точек для отображения
+    const maxPoints = 5000; // Увеличено для сохранения деталей пиков
     const step = Math.max(1, Math.floor(t.length / maxPoints));
-
-    if (step <= 2) {
-      // Данных мало — не прореживаем
-      const allIndices = [];
-      const allT = [];
-      for (let i = 0; i < t.length; i++) {
-        allT.push(t[i]);
-        allIndices.push(i);
-      }
-      return { t: allT, indices: allIndices, originalLength: t.length };
-    }
 
     const downsampledT = [];
     const downsampledIndices = [];
 
-    for (let bucketStart = 0; bucketStart < t.length; bucketStart += step) {
-      const bucketEnd = Math.min(bucketStart + step, t.length);
-
-      let minIdx = bucketStart;
-      let maxIdx = bucketStart;
-      let minVal = interfCorrected[bucketStart];
-      let maxVal = interfCorrected[bucketStart];
-
-      for (let j = bucketStart + 1; j < bucketEnd; j++) {
-        if (interfCorrected[j] < minVal) { minVal = interfCorrected[j]; minIdx = j; }
-        if (interfCorrected[j] > maxVal) { maxVal = interfCorrected[j]; maxIdx = j; }
-      }
-
-      // Добавляем min и max в порядке их появления по времени
-      if (minIdx === maxIdx) {
-        downsampledT.push(t[minIdx]);
-        downsampledIndices.push(minIdx);
-      } else if (minIdx < maxIdx) {
-        downsampledT.push(t[minIdx]);
-        downsampledIndices.push(minIdx);
-        downsampledT.push(t[maxIdx]);
-        downsampledIndices.push(maxIdx);
-      } else {
-        downsampledT.push(t[maxIdx]);
-        downsampledIndices.push(maxIdx);
-        downsampledT.push(t[minIdx]);
-        downsampledIndices.push(minIdx);
-      }
+    for (let i = 0; i < t.length; i += step) {
+      downsampledT.push(t[i]);
+      downsampledIndices.push(i);
     }
 
     return {
