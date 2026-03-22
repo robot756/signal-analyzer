@@ -855,21 +855,10 @@ const ChartComponent = ({ data }) => {
       // Определяем тип: max (положительный) или min (отрицательный)
       const type = shiftedInterfFull[bestIdx] > 0 ? "max" : "min";
 
-      // Параболическая интерполяция для субсэмпловой точности
-      let peakTime = t[bestIdx];
-      let peakValue = shiftedInterfFull[bestIdx];
-      if (bestIdx > 0 && bestIdx < shiftedInterfFull.length - 1) {
-        const y1 = shiftedInterfFull[bestIdx - 1];
-        const y2 = shiftedInterfFull[bestIdx];
-        const y3 = shiftedInterfFull[bestIdx + 1];
-        const denom = y1 - 2 * y2 + y3;
-        if (Math.abs(denom) > 1e-30) {
-          const dx = 0.5 * (y1 - y3) / denom;
-          const dt = t[bestIdx + 1] - t[bestIdx];
-          peakTime = t[bestIdx] + dx * dt;
-          peakValue = y2 - 0.25 * (y1 - y3) * dx;
-        }
-      }
+      // Используем точные значения сэмплов (без интерполяции),
+      // чтобы точки точно совпадали с отображаемой линией графика
+      const peakTime = t[bestIdx];
+      const peakValue = shiftedInterfFull[bestIdx];
 
       // Фильтр по времени
       if (typeof minTime === "number" && peakTime < minTime) continue;
@@ -886,21 +875,60 @@ const ChartComponent = ({ data }) => {
   }, [tenzOffset, interfOffset, intersectionXMin, data?.rawData, getSeriesValueAtTime]);
 
   // Мемоизация прореженных данных для оптимизации
+  // Используем min-max downsampling: для каждого бакета сохраняем
+  // точки с минимальным и максимальным значением интерферосигнала,
+  // чтобы пики и впадины не пропадали при прореживании.
   const downsampledData = useMemo(() => {
     if (!data?.rawData) return null;
-    
+
     const { t, tenz, interfCorrected } = data.rawData;
     const maxPoints = 2000; // Максимальное количество точек для отображения
     const step = Math.max(1, Math.floor(t.length / maxPoints));
-    
+
+    if (step <= 2) {
+      // Данных мало — не прореживаем
+      const allIndices = [];
+      const allT = [];
+      for (let i = 0; i < t.length; i++) {
+        allT.push(t[i]);
+        allIndices.push(i);
+      }
+      return { t: allT, indices: allIndices, originalLength: t.length };
+    }
+
     const downsampledT = [];
     const downsampledIndices = [];
-    
-    for (let i = 0; i < t.length; i += step) {
-      downsampledT.push(t[i]);
-      downsampledIndices.push(i);
+
+    for (let bucketStart = 0; bucketStart < t.length; bucketStart += step) {
+      const bucketEnd = Math.min(bucketStart + step, t.length);
+
+      let minIdx = bucketStart;
+      let maxIdx = bucketStart;
+      let minVal = interfCorrected[bucketStart];
+      let maxVal = interfCorrected[bucketStart];
+
+      for (let j = bucketStart + 1; j < bucketEnd; j++) {
+        if (interfCorrected[j] < minVal) { minVal = interfCorrected[j]; minIdx = j; }
+        if (interfCorrected[j] > maxVal) { maxVal = interfCorrected[j]; maxIdx = j; }
+      }
+
+      // Добавляем min и max в порядке их появления по времени
+      if (minIdx === maxIdx) {
+        downsampledT.push(t[minIdx]);
+        downsampledIndices.push(minIdx);
+      } else if (minIdx < maxIdx) {
+        downsampledT.push(t[minIdx]);
+        downsampledIndices.push(minIdx);
+        downsampledT.push(t[maxIdx]);
+        downsampledIndices.push(maxIdx);
+      } else {
+        downsampledT.push(t[maxIdx]);
+        downsampledIndices.push(maxIdx);
+        downsampledT.push(t[minIdx]);
+        downsampledIndices.push(minIdx);
+      }
     }
-    
+
     return {
       t: downsampledT,
       indices: downsampledIndices,
