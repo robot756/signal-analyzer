@@ -411,10 +411,10 @@ export const generateChartData = (results, options = {}) => {
         pointBackgroundColor: "rgba(255,99,132,0.6)",
         showLine: true 
       },
-      { label: "Интерф CH3 (SG)", data: lt.map((x,i)=>({x,y:lsm[i]})), borderColor:"rgb(0,0,0)", borderWidth:1 },
-      { label: "Интерф центрированный", data: lt.map((x,i)=>({x,y:lint[i]})), borderColor:"rgb(54,162,235)", borderWidth:1 },
+      { label: "Интерферограмма CH3 (сглаж.)", data: lt.map((x,i)=>({x,y:lsm[i]})), borderColor:"rgb(0,0,0)", borderWidth:1 },
+      { label: "Интерферограмма (центр.)", data: lt.map((x,i)=>({x,y:lint[i]})), borderColor:"rgb(54,162,235)", borderWidth:1 },
       { 
-        label: "Пересечения тензо и интерф", 
+        label: "Пересечения тензо- и интерферосигнала", 
         data: intersectionPoints.map(p=>({x:p.time,y:p.value})), 
         pointStyle: "circle",
         pointRadius: 4,
@@ -442,7 +442,7 @@ export const generateChartData = (results, options = {}) => {
         borderJoinStyle: 'round'
       },
       { 
-        label: "Пересечения тензо и интерф", 
+        label: "Пересечения тензо- и интерферосигнала", 
         data: intersectionPoints.map(p=>({x:p.time,y:p.value})), 
         pointStyle: "circle",
         pointRadius: 4,

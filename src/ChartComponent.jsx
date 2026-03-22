@@ -368,7 +368,7 @@ const ChartComponent = ({ data }) => {
         data: {
           datasets: [
             {
-              label: "Скорость в точках пересечений",
+              label: "Скорость (линия)",
               data: velocitySeries.map((p) => ({ x: p.time, y: p.value })),
               borderColor: "rgb(34,197,94)",
               backgroundColor: "rgba(34,197,94,0.08)",
@@ -384,7 +384,7 @@ const ChartComponent = ({ data }) => {
               borderWidth: 2.5,
             },
             {
-              label: "Скорость (точки пересечений)",
+              label: "Скорость (точки)",
               data: velocityMarkers.map((p) => ({ x: p.time, y: p.value })),
               borderColor: "rgb(34,197,94)",
               backgroundColor: "rgb(34,197,94)",
@@ -520,7 +520,7 @@ const ChartComponent = ({ data }) => {
         data: {
           datasets: [
             {
-              label: "Перемещение в точках пересечений",
+              label: "Перемещение (линия)",
               data: displacementSeries.map((p) => ({ x: p.time, y: p.value })),
               borderColor: "rgb(59,130,246)",
               backgroundColor: "rgba(59,130,246,0.08)",
@@ -536,7 +536,7 @@ const ChartComponent = ({ data }) => {
               borderWidth: 2.5,
             },
             {
-              label: "Перемещение (точки пересечений)",
+              label: "Перемещение (точки)",
               data: displacementMarkers.map((p) => ({ x: p.time, y: p.value })),
               borderColor: "rgb(59,130,246)",
               backgroundColor: "rgb(59,130,246)",
@@ -944,7 +944,7 @@ const ChartComponent = ({ data }) => {
     }
 
     const interfDatasetIndex = originalChart.data.datasets.findIndex(
-      (ds) => ds.label === "Интерф центрированный"
+      (ds) => ds.label === "Интерферограмма (центр.)"
     );
     if (interfDatasetIndex !== -1) {
       originalChart.data.datasets[interfDatasetIndex].data = interfData;
@@ -972,7 +972,7 @@ const ChartComponent = ({ data }) => {
     
     // Обновляем обычный датасет пересечений на original графике
     const originalIntersectionDatasetIndex = originalChart.data.datasets.findIndex(
-      (ds) => ds.label === "Пересечения тензо и интерф"
+      (ds) => ds.label === "Пересечения тензо- и интерферосигнала"
     );
     if (originalIntersectionDatasetIndex !== -1) {
       originalChart.data.datasets[originalIntersectionDatasetIndex].data = intersectionsForPlot.map(
@@ -1447,9 +1447,9 @@ const ChartComponent = ({ data }) => {
         <aside className="intersection-panel">
           <div className="intersection-panel__header">
             <span className="chart-chip chart-chip--highlight">
-              Пересечения Y={averageY.toFixed(4)}
+              Пересечения при Y = {averageY.toFixed(4)}
             </span>
-            <p>Общие точки tензо и интерферосигнала</p>
+            <p>Общие точки тензо- и интерферосигнала</p>
           </div>
           <div className="intersection-table-wrapper">
             <table className="intersection-table">

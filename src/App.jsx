@@ -62,7 +62,7 @@ function App() {
     <div className="App">
       <header className="App-header">
         <h1>Анализатор сигналов</h1>
-        <p>Загрузите CSV файл для построения графиков</p>
+        <p>Загрузите CSV-файл для построения графиков</p>
       </header>
 
       <main className="App-main">
