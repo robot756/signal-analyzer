@@ -1179,44 +1179,7 @@ const ChartComponent = ({ data }) => {
 
   return (
     <div className="charts-wrapper">
-      {data?.rawData && (
-        <div className="tenz-offset-control">
-          <label htmlFor="tenz-offset-input" className="tenz-offset-label">
-            Сдвиг тензометрического сигнала (CH1) по оси Y:
-          </label>
-          <div className="tenz-offset-input-group">
-            <input
-              id="tenz-offset-input"
-              type="range"
-              min={offsetRange.min}
-              max={offsetRange.max}
-              step={offsetRange.step}
-              value={tenzOffset}
-              onChange={(e) => setTenzOffset(parseFloat(e.target.value))}
-              className="tenz-offset-slider"
-            />
-            <input
-              type="number"
-              min={offsetRange.min}
-              max={offsetRange.max}
-              step={offsetRange.step}
-              value={tenzOffset}
-              onChange={(e) =>
-                setTenzOffset(parseFloat(e.target.value) || 0)
-              }
-              className="tenz-offset-number"
-            />
-            <button
-              type="button"
-              className="tenz-offset-reset-btn"
-              onClick={() => setTenzOffset(0)}
-              aria-label="Сбросить сдвиг"
-            >
-              Сбросить
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Сдвиг тензосигнала убран по запросу */}
       {data?.rawData && (
         <div className="tenz-offset-control">
           <label htmlFor="intersection-xmin-input" className="tenz-offset-label">
