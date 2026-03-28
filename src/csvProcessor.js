@@ -271,7 +271,7 @@ const filterClosePoints = (t0, y0, minDistance) => {
 };
 
 // -------------------- Пересечения сигналов --------------------
-const findSignalIntersectionsAtZero = (t, tenz, interf, yThreshold = 0.02) => {
+const findSignalIntersectionsAtZero = (t, tenz, interf) => {
   const intersections = [];
   for (let i = 1; i < t.length; i++) {
     const diffPrev = tenz[i - 1] - interf[i - 1];
@@ -282,7 +282,7 @@ const findSignalIntersectionsAtZero = (t, tenz, interf, yThreshold = 0.02) => {
       const time = t1 + ratio * (t2 - t1);
       const value = (tenz[i - 1] + ratio * (tenz[i] - tenz[i - 1])
                      + interf[i - 1] + ratio * (interf[i] - interf[i - 1])) / 2;
-      if (Math.abs(value) <= yThreshold) intersections.push({ time, value });
+      intersections.push({ time, value });
     }
   }
   return intersections;

@@ -681,7 +681,6 @@ const ChartComponent = ({ data }) => {
 
     // Пересчитываем пересечения
     const newIntersections = [];
-    const yThreshold = 0.02;
     for (let i = 1; i < interfCorrected.length; i++) {
       const diffPrev = shiftedTenz[i - 1] - shiftedInterf[i - 1];
       const diffCurr = shiftedTenz[i] - shiftedInterf[i];
@@ -705,9 +704,7 @@ const ChartComponent = ({ data }) => {
           shiftedInterf[i - 1] + ratio * (shiftedInterf[i] - shiftedInterf[i - 1]);
         const value = (tenzValue + interfValue) / 2;
 
-        if (Math.abs(value) <= yThreshold) {
-          newIntersections.push({ time, value });
-        }
+        newIntersections.push({ time, value });
       }
     }
 
