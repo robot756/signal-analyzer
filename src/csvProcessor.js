@@ -131,8 +131,12 @@ const calculateDerivativeSG = (t, signal, windowSize = 31, polyOrder = 3) => {
 // -------------------- Baseline removal --------------------
 const removeBaseline = (arr, N = 2000) => {
   const count = Math.min(arr.length, N);
-  const avg = arr.slice(0, count).reduce((s, v) => s + v, 0) / count;
-  return arr.map(v => v - avg);
+  let sum = 0;
+  for (let i = 0; i < count; i++) sum += arr[i];
+  const avg = sum / count;
+  const out = new Array(arr.length);
+  for (let i = 0; i < arr.length; i++) out[i] = arr[i] - avg;
+  return out;
 };
 
 // -------------------- CSV парсинг --------------------
@@ -186,12 +190,23 @@ const parseCSV = (csvText, options = {}) => {
   // -------------------- CHANGES: локальная производная --------------------
   const mask = new Array(t.length).fill(false);
   const derivWindowSec = derivativeWindowNs * 1e-9;
+
+  // Binary search для нахождения границ окна — O(k * log n) вместо O(k * n)
+  const lowerBound = (arr, val) => {
+    let lo = 0, hi = arr.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (arr[mid] < val) lo = mid + 1; else hi = mid;
+    }
+    return lo;
+  };
+
   for (let k = 0; k < filteredT0.length; k++) {
     const center = filteredT0[k];
-    const tMin = center - derivWindowSec;
-    const tMax = center + derivWindowSec;
-    for (let i = 0; i < t.length; i++) {
-      if (t[i] >= tMin && t[i] <= tMax) mask[i] = true;
+    const iStart = lowerBound(t, center - derivWindowSec);
+    const iEnd = lowerBound(t, center + derivWindowSec + 1e-15);
+    for (let i = iStart; i < iEnd && i < t.length; i++) {
+      mask[i] = true;
     }
   }
 
@@ -248,6 +263,23 @@ const findZeroCrossings = (t, interf, eps = 1e-6) => {
 };
 
 // -------------------- Фильтрация близких точек --------------------
+// Фильтрация массива объектов {time, ...} по минимальной дистанции
+export const filterCloseIntersections = (points, minDistance = 100e-9) => {
+  if (!points || points.length <= 1) return points || [];
+  let filtered = [...points].sort((a, b) => a.time - b.time);
+  for (let iter = 0; iter < 10; iter++) {
+    const nf = [filtered[0]];
+    for (let i = 1; i < filtered.length; i++) {
+      if (filtered[i].time - nf[nf.length - 1].time >= minDistance) {
+        nf.push(filtered[i]);
+      }
+    }
+    if (nf.length === filtered.length) break;
+    filtered = nf;
+  }
+  return filtered;
+};
+
 const filterClosePoints = (t0, y0, minDistance) => {
   if (!t0 || t0.length <= 1) return { filteredT0: t0 || [], filteredY0: y0 || [] };
 
@@ -398,31 +430,25 @@ export const generateChartData = (results, options = {}) => {
 
   const chartData = {
     original: [
-      { 
-        label: "Тензометрический сигнал (CH1)", 
-        data: lt.map((x,i)=>({x,y:lten[i]})), 
-        borderColor: "rgb(255,99,132)", 
-        backgroundColor: "rgba(255,99,132,0.3)",
-        borderWidth: 1.5, 
-        pointRadius: 2,
-        pointHoverRadius: 4,
-        pointBorderWidth: 1.5,
-        pointBorderColor: "rgb(255,99,132)",
-        pointBackgroundColor: "rgba(255,99,132,0.6)",
-        showLine: true 
+      {
+        label: "Тензометрический сигнал (CH1)",
+        data: lt.map((x,i)=>({x,y:lten[i]})),
+        borderColor: "rgb(255,99,132)",
+        borderWidth: 1.5,
+        pointRadius: 0,
+        showLine: true
       },
-      { label: "Интерферограмма CH3 (сглаж.)", data: lt.map((x,i)=>({x,y:lsm[i]})), borderColor:"rgb(0,0,0)", borderWidth:1 },
-      { label: "Интерферограмма (центр.)", data: lt.map((x,i)=>({x,y:lint[i]})), borderColor:"rgb(54,162,235)", borderWidth:1 },
-      { 
-        label: "Пересечения тензо- и интерферосигнала", 
-        data: intersectionPoints.map(p=>({x:p.time,y:p.value})), 
-        pointStyle: "circle",
+      { label: "Интерферограмма CH3 (сглаж.)", data: lt.map((x,i)=>({x,y:lsm[i]})), borderColor:"rgb(0,0,0)", borderWidth:1, pointRadius: 0 },
+      { label: "Интерферограмма (центр.)", data: lt.map((x,i)=>({x,y:lint[i]})), borderColor:"rgb(54,162,235)", borderWidth:1, pointRadius: 0 },
+      {
+        label: "Пересечения тензо- и интерферосигнала",
+        data: intersectionPoints.map(p=>({x:p.time,y:p.value})),
         pointRadius: 4,
         pointHoverRadius: 6,
-        showLine: false, 
+        showLine: false,
         borderColor: "rgb(255, 140, 0)",
         backgroundColor: "rgba(255, 215, 0, 0.8)",
-        borderWidth: 2,
+        borderWidth: 0,
         pointBorderColor: "rgb(255, 140, 0)",
         pointBackgroundColor: "rgba(255, 215, 0, 0.9)"
       }

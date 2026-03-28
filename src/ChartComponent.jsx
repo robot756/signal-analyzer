@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useCallback, useState, useMemo } from "react";
 import { Chart, registerables } from "chart.js";
 import zoomPlugin from "chartjs-plugin-zoom";
+import { filterCloseIntersections } from "./csvProcessor";
 
 const intersectionMarkerPlugin = {
   id: "intersectionMarker",
@@ -12,38 +13,68 @@ const intersectionMarkerPlugin = {
       const meta = chart.getDatasetMeta(datasetIndex);
       if (!chart.isDatasetVisible(datasetIndex)) return;
 
-      meta.data.forEach((element) => {
-        // Используем точные координаты элемента после всех трансформаций
-        const x = element.x;
-        const y = element.y;
-        
-        // Проверяем, что элемент видим на canvas
-        if (x === undefined || y === undefined || isNaN(x) || isNaN(y)) return;
-        
-        const size = dataset.markerSize ?? 6;
+      const elements = meta.data;
+      if (elements.length === 0) return;
 
-        ctx.save();
-        ctx.strokeStyle = dataset.markerColor ?? "#000000";
-        ctx.globalAlpha = dataset.markerAlpha ?? 0.8;
-        ctx.lineWidth = dataset.markerLineWidth ?? 2;
-        ctx.lineCap = "round";
-        ctx.beginPath();
+      const size = dataset.markerSize ?? 6;
+
+      ctx.save();
+      ctx.strokeStyle = dataset.markerColor ?? "#000000";
+      ctx.globalAlpha = dataset.markerAlpha ?? 0.8;
+      ctx.lineWidth = dataset.markerLineWidth ?? 2;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+
+      for (let i = 0; i < elements.length; i++) {
+        const x = elements[i].x;
+        const y = elements[i].y;
+        if (x === undefined || y === undefined || isNaN(x) || isNaN(y)) continue;
         ctx.moveTo(x - size, y - size);
         ctx.lineTo(x + size, y + size);
         ctx.moveTo(x - size, y + size);
         ctx.lineTo(x + size, y - size);
-        ctx.stroke();
-        ctx.restore();
-      });
+      }
+
+      ctx.stroke();
+      ctx.restore();
     });
   },
 };
 
 Chart.register(...registerables, zoomPlugin, intersectionMarkerPlugin);
 
+// Отключаем анимации глобально для производительности
+Chart.defaults.animation = false;
+Chart.defaults.transitions.active.animation.duration = 0;
+
 const ZOOM_STEP = 1.25;
 
-const ChartComponent = ({ data }) => {
+const formatTime = (value) => {
+  if (typeof value !== "number") return "-";
+  return value.toExponential(3);
+};
+
+const formatSignal = (value) => {
+  if (typeof value !== "number") return "-";
+  return value.toFixed(5);
+};
+
+const formatSpeed = (value) => {
+  if (typeof value !== "number") return "-";
+  return value.toExponential(3);
+};
+
+const formatDisplacement = (value) => {
+  if (typeof value !== "number") return "-";
+  return value.toExponential(3);
+};
+
+// Кэшированные стили для таблицы экстремумов
+const STYLE_EXTREMUM_HEADER = { backgroundColor: "rgba(220, 38, 38, 0.15)", color: "rgb(220, 38, 38)", border: "1px solid rgb(220, 38, 38)" };
+const STYLE_EXTREMUM_MAX = { color: "rgb(220, 38, 38)", fontWeight: 600 };
+const STYLE_EXTREMUM_MIN = { color: "rgb(37, 99, 235)", fontWeight: 600 };
+
+const ChartComponent = React.memo(({ data }) => {
   const originalChartRef = useRef(null);
   const velocityChartRef = useRef(null);
   const displacementChartRef = useRef(null);
@@ -53,168 +84,71 @@ const ChartComponent = ({ data }) => {
   const intersections = data?.intersections ?? [];
   const [originalAxisVisibility, setOriginalAxisVisibility] = useState({});
   const [intersectionVisibility, setIntersectionVisibility] = useState(true);
-  const [tenzOffset, setTenzOffset] = useState(0); // Сдвиг тензосигнала по Y
-  const [interfOffset, setInterfOffset] = useState(0); // Сдвиг интерферосигнала по Y
-  const [currentIntersections, setCurrentIntersections] = useState([]); // Текущие пересечения
-  const [intersectionXMin, setIntersectionXMin] = useState(null); // Минимальное время для поиска пересечений
+  const [tenzOffset, setTenzOffset] = useState(0);
+  const [interfOffset, setInterfOffset] = useState(0);
+  const [currentIntersections, setCurrentIntersections] = useState([]);
+  const [intersectionXMin, setIntersectionXMin] = useState(null);
   const [velocitySeries, setVelocitySeries] = useState([]);
   const [displacementSeries, setDisplacementSeries] = useState([]);
   const [velocityMarkers, setVelocityMarkers] = useState([]);
   const [displacementMarkers, setDisplacementMarkers] = useState([]);
-  const [extremumPoints, setExtremumPoints] = useState([]); // Точки экстремумов интерферограммы
+  const [extremumPoints, setExtremumPoints] = useState([]);
   const [showExtremumMax, setShowExtremumMax] = useState(true);
   const [showExtremumMin, setShowExtremumMin] = useState(true);
-  // Используем СИ для He-Ne лазера (632.8 нм)
-  const useSIUnits = true;
-  const wavelength = 632.8e-9; // Длина волны He-Ne лазера в метрах
   const interfCenterPoint = data?.focusPoints?.interfCenter;
-
-  const formatTime = (value) => {
-    if (typeof value !== "number") return "-";
-    return value.toExponential(3);
-  };
-
-  const formatSignal = (value) => {
-    if (typeof value !== "number") return "-";
-    return value.toFixed(5);
-  };
-
-  const formatSpeed = (value) => {
-    if (typeof value !== "number") return "-";
-    return value.toExponential(3);
-  };
-
-  const formatDisplacement = (value) => {
-    if (typeof value !== "number") return "-";
-    return value.toExponential(3);
-  };
-
-  // Оптимизированная функция поиска с бинарным поиском (O(log n) вместо O(n))
-  const getSeriesValueAtTime = useCallback((series, time) => {
-    if (!Array.isArray(series) || series.length === 0 || typeof time !== "number") {
-      return null;
-    }
-
-    const n = series.length;
-    
-    // Граничные случаи
-    if (time <= series[0].time) return series[0].value;
-    if (time >= series[n - 1].time) return series[n - 1].value;
-
-    // Бинарный поиск
-    let left = 0;
-    let right = n - 1;
-    
-    while (right - left > 1) {
-      const mid = Math.floor((left + right) / 2);
-      if (series[mid].time <= time) {
-        left = mid;
-      } else {
-        right = mid;
-      }
-    }
-
-    // Линейная интерполяция между найденными точками
-    const prev = series[left];
-    const curr = series[right];
-    const dt = curr.time - prev.time;
-    if (dt === 0) return curr.value;
-    const ratio = (time - prev.time) / dt;
-    return prev.value + ratio * (curr.value - prev.value);
-  }, []);
 
   useEffect(() => {
     if (!data) return;
 
     const buildOptions = (title, yLabel) => ({
       responsive: true,
+      maintainAspectRatio: false,
+      normalized: true,
       interaction: {
         mode: "nearest",
         intersect: true,
-        // Оптимизация: более стабильный режим взаимодействия
+        axis: "x",
+      },
+      elements: {
+        point: { radius: 0, hoverRadius: 4 },
+        line: { tension: 0, borderWidth: 1.5 },
       },
       scales: {
         x: {
           type: "linear",
-          title: {
-            display: true,
-            text: "Время (секунды)",
-          },
+          title: { display: true, text: "Время (секунды)" },
         },
         y: {
           type: "linear",
-          title: {
-            display: true,
-            text: yLabel,
-          },
+          title: { display: true, text: yLabel },
         },
       },
       plugins: {
-        title: {
-          display: true,
-          text: title,
-        },
-        legend: {
-          display: true,
-        },
+        title: { display: true, text: title },
+        legend: { display: false },
         tooltip: {
           enabled: true,
-          // Оптимизация: уменьшаем задержку и длительность показа
-          animation: {
-            duration: 0
-          },
-          // Исправление: стабильное позиционирование tooltip
+          animation: false,
           position: 'nearest',
-          // Исправление: предотвращаем "убегание" tooltip
-          followCursor: false,
-          // Исправление: добавляем задержку для стабильности
-          delay: 0,
           callbacks: {
             label: function(context) {
               const point = context.raw;
-              let xValue, yValue;
-              
-              if (typeof point.x === 'number') {
-                // Упрощенное форматирование для производительности
-                if (Math.abs(point.x) < 0.001 || Math.abs(point.x) >= 1000) {
-                  xValue = point.x.toExponential(3) + ' с';
-                } else {
-                  xValue = point.x.toFixed(6) + ' с';
-                }
-              } else {
-                xValue = String(point.x);
-              }
-              
-              if (typeof point.y === 'number') {
-                yValue = point.y.toFixed(6);
-              } else {
-                yValue = String(point.y);
-              }
-              
-              return [
-                `${context.dataset.label || ''}`,
-                `X: ${xValue}`,
-                `Y: ${yValue}`
-              ];
+              const xValue = typeof point.x === 'number'
+                ? point.x.toExponential(3) + ' с'
+                : String(point.x);
+              const yValue = typeof point.y === 'number'
+                ? point.y.toFixed(6)
+                : String(point.y);
+              return [`${context.dataset.label || ''}`, `X: ${xValue}`, `Y: ${yValue}`];
             },
           },
         },
         zoom: {
-          pan: {
-            enabled: true,
-            mode: "xy",
-          },
+          pan: { enabled: true, mode: "xy", threshold: 5 },
           zoom: {
-            wheel: {
-              enabled: true,
-              modifierKey: "ctrl",
-            },
-            pinch: {
-              enabled: true,
-            },
-            drag: {
-              enabled: false,
-            },
+            wheel: { enabled: true, modifierKey: "ctrl", speed: 0.1 },
+            pinch: { enabled: true },
+            drag: { enabled: false },
             mode: "xy",
           },
         },
@@ -307,33 +241,12 @@ const ChartComponent = ({ data }) => {
         data?.rawData?.t && data.rawData.t.length > 0 ? data.rawData.t[0] : null;
       const minTime = intersectionXMin ?? rawT0;
       const base = data.intersections;
-      let filtered =
+      const filtered =
         typeof minTime === "number"
           ? base.filter((p) => p.time >= minTime)
           : [...base];
 
-      // Фильтрация близких точек (минимальная дистанция 100 нс)
-      const MIN_DIST = 100e-9;
-      if (filtered.length > 1) {
-        filtered.sort((a, b) => a.time - b.time);
-        for (let iter = 0; iter < 10; iter++) {
-          const nf = [filtered[0]];
-          for (let i = 1; i < filtered.length; i++) {
-            if (filtered[i].time - nf[nf.length - 1].time >= MIN_DIST) {
-              nf.push(filtered[i]);
-            }
-          }
-          if (nf.length === filtered.length) break;
-          filtered = nf;
-        }
-      }
-
-      // Убираем первую точку пересечения — она создаёт разрыв на графиках
-      if (filtered.length > 2) {
-        filtered = filtered.slice(1);
-      }
-
-      setCurrentIntersections(filtered);
+      setCurrentIntersections(filterCloseIntersections(filtered));
     }
   }, [data, intersectionXMin]);
 
@@ -374,32 +287,31 @@ const ChartComponent = ({ data }) => {
               backgroundColor: "rgba(34,197,94,0.08)",
               fill: true,
               showLine: true,
-              pointRadius: 5,
-              pointHoverRadius: 7,
+              pointRadius: 3,
+              pointHoverRadius: 5,
               pointBackgroundColor: "rgb(34,197,94)",
-              pointBorderColor: "#fff",
-              pointBorderWidth: 2,
+              pointBorderWidth: 0,
               tension: 0.3,
               cubicInterpolationMode: 'monotone',
-              borderWidth: 2.5,
+              borderWidth: 2,
             },
             {
               label: "Скорость (точки)",
               data: velocityMarkers.map((p) => ({ x: p.time, y: p.value })),
-              borderColor: "rgb(34,197,94)",
               backgroundColor: "rgb(34,197,94)",
               showLine: false,
-              pointRadius: 6,
-              pointHoverRadius: 8,
+              pointRadius: 4,
+              pointHoverRadius: 6,
               pointBackgroundColor: "rgb(34,197,94)",
-              pointBorderColor: "#fff",
-              pointBorderWidth: 2,
+              pointBorderWidth: 0,
               borderWidth: 0,
             },
           ],
         },
         options: {
           responsive: true,
+          maintainAspectRatio: false,
+          normalized: true,
           interaction: {
             mode: "nearest",
             intersect: true,
@@ -437,42 +349,25 @@ const ChartComponent = ({ data }) => {
               padding: { top: 10, bottom: 15 },
               color: '#1a1a1a',
             },
-            legend: {
-              display: true,
-              position: 'top',
-              labels: {
-                usePointStyle: false,
-                boxWidth: 20,
-                boxHeight: 14,
-                padding: 15,
-                font: { size: 12 },
-              },
-            },
+            legend: { display: false },
             zoom: {
-              pan: {
-                enabled: true,
-                mode: "xy",
-              },
+              pan: { enabled: true, mode: "xy", threshold: 5 },
               zoom: {
-                wheel: {
-                  enabled: true,
-                  modifierKey: "ctrl",
-                },
-                pinch: {
-                  enabled: true,
-                },
-                drag: {
-                  enabled: false,
-                },
+                wheel: { enabled: true, modifierKey: "ctrl", speed: 0.1 },
+                pinch: { enabled: true },
+                drag: { enabled: false },
                 mode: "xy",
               },
             },
             tooltip: {
               enabled: true,
-              animation: { duration: 0 },
+              animation: false,
               position: 'nearest',
-              followCursor: false,
-              delay: 0,
+              filter: function (tooltipItem, currentIndex, tooltipItems) {
+                return !tooltipItems.some((item, idx) =>
+                  idx < currentIndex && item.raw.x === tooltipItem.raw.x && item.raw.y === tooltipItem.raw.y
+                );
+              },
               callbacks: {
                 label: function (context) {
                   const point = context.raw;
@@ -526,32 +421,31 @@ const ChartComponent = ({ data }) => {
               backgroundColor: "rgba(59,130,246,0.08)",
               fill: true,
               showLine: true,
-              pointRadius: 5,
-              pointHoverRadius: 7,
+              pointRadius: 3,
+              pointHoverRadius: 5,
               pointBackgroundColor: "rgb(59,130,246)",
-              pointBorderColor: "#fff",
-              pointBorderWidth: 2,
+              pointBorderWidth: 0,
               tension: 0.3,
               cubicInterpolationMode: 'monotone',
-              borderWidth: 2.5,
+              borderWidth: 2,
             },
             {
               label: "Перемещение (точки)",
               data: displacementMarkers.map((p) => ({ x: p.time, y: p.value })),
-              borderColor: "rgb(59,130,246)",
               backgroundColor: "rgb(59,130,246)",
               showLine: false,
-              pointRadius: 6,
-              pointHoverRadius: 8,
+              pointRadius: 4,
+              pointHoverRadius: 6,
               pointBackgroundColor: "rgb(59,130,246)",
-              pointBorderColor: "#fff",
-              pointBorderWidth: 2,
+              pointBorderWidth: 0,
               borderWidth: 0,
             },
           ],
         },
         options: {
           responsive: true,
+          maintainAspectRatio: false,
+          normalized: true,
           interaction: {
             mode: "nearest",
             intersect: true,
@@ -589,42 +483,25 @@ const ChartComponent = ({ data }) => {
               padding: { top: 10, bottom: 15 },
               color: '#1a1a1a',
             },
-            legend: {
-              display: true,
-              position: 'top',
-              labels: {
-                usePointStyle: false,
-                boxWidth: 20,
-                boxHeight: 14,
-                padding: 15,
-                font: { size: 12 },
-              },
-            },
+            legend: { display: false },
             zoom: {
-              pan: {
-                enabled: true,
-                mode: "xy",
-              },
+              pan: { enabled: true, mode: "xy", threshold: 5 },
               zoom: {
-                wheel: {
-                  enabled: true,
-                  modifierKey: "ctrl",
-                },
-                pinch: {
-                  enabled: true,
-                },
-                drag: {
-                  enabled: false,
-                },
+                wheel: { enabled: true, modifierKey: "ctrl", speed: 0.1 },
+                pinch: { enabled: true },
+                drag: { enabled: false },
                 mode: "xy",
               },
             },
             tooltip: {
               enabled: true,
-              animation: { duration: 0 },
+              animation: false,
               position: 'nearest',
-              followCursor: false,
-              delay: 0,
+              filter: function (tooltipItem, currentIndex, tooltipItems) {
+                return !tooltipItems.some((item, idx) =>
+                  idx < currentIndex && item.raw.x === tooltipItem.raw.x && item.raw.y === tooltipItem.raw.y
+                );
+              },
               callbacks: {
                 label: function (context) {
                   const point = context.raw;
@@ -714,27 +591,7 @@ const ChartComponent = ({ data }) => {
         ? newIntersections.filter((p) => p.time >= minTime)
         : [...newIntersections];
 
-    // Фильтрация близких точек (аналог filterClosePoints из csvProcessor.js)
-    // Минимальная дистанция 100 нс между соседними пересечениями
-    const MIN_INTERSECTION_DISTANCE = 100e-9; // 100 нс
-    if (intersectionsForPlot.length > 1) {
-      intersectionsForPlot.sort((a, b) => a.time - b.time);
-      for (let iter = 0; iter < 10; iter++) {
-        const newFiltered = [intersectionsForPlot[0]];
-        for (let i = 1; i < intersectionsForPlot.length; i++) {
-          if (intersectionsForPlot[i].time - newFiltered[newFiltered.length - 1].time >= MIN_INTERSECTION_DISTANCE) {
-            newFiltered.push(intersectionsForPlot[i]);
-          }
-        }
-        if (newFiltered.length === intersectionsForPlot.length) break;
-        intersectionsForPlot = newFiltered;
-      }
-    }
-
-    // Убираем первую точку пересечения — она создаёт разрыв на графиках
-    if (intersectionsForPlot.length > 2) {
-      intersectionsForPlot = intersectionsForPlot.slice(1);
-    }
+    intersectionsForPlot = filterCloseIntersections(intersectionsForPlot);
 
     // Обновляем состояние для таблицы пересечений
     setCurrentIntersections(intersectionsForPlot);
@@ -749,8 +606,7 @@ const ChartComponent = ({ data }) => {
       const lambda = 0.63e-6;              // 0.63 мкм
       const du = lambda / 4;               // аналог 0.63/4*10^(-6)
 
-      // Сортируем точки пересечения по времени (на всякий случай)
-      const sortedIntersections = [...intersectionsForPlot].sort((a, b) => a.time - b.time);
+      const sortedIntersections = intersectionsForPlot;
 
       let u = 0;
 
@@ -778,9 +634,10 @@ const ChartComponent = ({ data }) => {
         const intersectionTime = sortedIntersections[i].time;
 
         if (i === 0) {
-          // Первая точка: задаём начальное перемещение
-          u = du;
+          // Первая точка: начинаем от нуля
+          u = 0;
           displacementPoints.push({ time: intersectionTime, value: u });
+          velocityPoints.push({ time: intersectionTime, value: 0 });
         } else {
           const v = rawVelocities[i - 1];
           if (v === null || !isFinite(v)) continue;
@@ -869,7 +726,7 @@ const ChartComponent = ({ data }) => {
     setDisplacementSeries(displacementPoints);
     setVelocityMarkers(markerVelocities);
     setDisplacementMarkers(markerDisplacements);
-  }, [tenzOffset, interfOffset, intersectionXMin, data?.rawData, getSeriesValueAtTime]);
+  }, [tenzOffset, interfOffset, intersectionXMin, data?.rawData]);
 
   // Мемоизация прореженных данных для оптимизации
   const downsampledData = useMemo(() => {
@@ -994,30 +851,24 @@ const ChartComponent = ({ data }) => {
       label: LABEL_MAX,
       data: maxData,
       showLine: false,
-      pointStyle: "circle",
-      pointRadius: 4,
-      pointHoverRadius: 6,
-      borderColor: "rgb(220, 38, 38)",
-      backgroundColor: "rgba(220, 38, 38, 0.7)",
-      pointBorderColor: "#fff",
-      pointBackgroundColor: "rgb(220, 38, 38)",
-      pointBorderWidth: 1.5,
+      pointRadius: 3,
+      pointHoverRadius: 5,
       borderWidth: 0,
+      pointBorderWidth: 0,
+      backgroundColor: "rgb(220, 38, 38)",
+      pointBackgroundColor: "rgb(220, 38, 38)",
     };
 
     const minDatasetDef = {
       label: LABEL_MIN,
       data: minData,
       showLine: false,
-      pointStyle: "circle",
-      pointRadius: 4,
-      pointHoverRadius: 6,
-      borderColor: "rgb(37, 99, 235)",
-      backgroundColor: "rgba(37, 99, 235, 0.7)",
-      pointBorderColor: "#fff",
-      pointBackgroundColor: "rgb(37, 99, 235)",
-      pointBorderWidth: 1.5,
+      pointRadius: 3,
+      pointHoverRadius: 5,
       borderWidth: 0,
+      pointBorderWidth: 0,
+      backgroundColor: "rgb(37, 99, 235)",
+      pointBackgroundColor: "rgb(37, 99, 235)",
     };
 
     if (maxIdx !== -1) {
@@ -1094,6 +945,16 @@ const ChartComponent = ({ data }) => {
       }));
   }, [data]);
 
+  // Pre-built Maps для O(1) поиска в таблице (вместо binary search на каждую строку)
+  const velocityMap = useMemo(
+    () => new Map(velocitySeries.map(p => [p.time, p.value])),
+    [velocitySeries]
+  );
+  const displacementMap = useMemo(
+    () => new Map(displacementSeries.map(p => [p.time, p.value])),
+    [displacementSeries]
+  );
+
   // Вычисляем среднее значение Y для пересечений
   const averageY = useMemo(() => {
     if (currentIntersections.length === 0) return 0;
@@ -1137,7 +998,12 @@ const ChartComponent = ({ data }) => {
       return { min: -1, max: 1, step: 0.001 };
     }
     const values = data.rawData.tenz;
-    const range = Math.max(...values) - Math.min(...values);
+    let lo = values[0], hi = values[0];
+    for (let i = 1; i < values.length; i++) {
+      if (values[i] < lo) lo = values[i];
+      if (values[i] > hi) hi = values[i];
+    }
+    const range = hi - lo;
     return {
       min: -range,
       max: range,
@@ -1150,8 +1016,12 @@ const ChartComponent = ({ data }) => {
       return { min: -1, max: 1, step: 0.001 };
     }
     const values = data.rawData.interfCorrected;
-    const range = Math.max(...values) - Math.min(...values);
-    const safeRange = range || 1;
+    let lo = values[0], hi = values[0];
+    for (let i = 1; i < values.length; i++) {
+      if (values[i] < lo) lo = values[i];
+      if (values[i] > hi) hi = values[i];
+    }
+    const safeRange = (hi - lo) || 1;
     return {
       min: -safeRange,
       max: safeRange,
@@ -1388,18 +1258,24 @@ const ChartComponent = ({ data }) => {
             )}
           </div>
         )}
-        <canvas ref={originalChartRef} width="800" height="400"></canvas>
+        <div className="chart-canvas-wrapper chart-canvas-wrapper--main">
+          <canvas ref={originalChartRef}></canvas>
+        </div>
       </section>
 
       {velocitySeries.length > 0 && (
         <section className="chart-section">
-          <canvas ref={velocityChartRef} width="800" height="280"></canvas>
+          <div className="chart-canvas-wrapper chart-canvas-wrapper--secondary">
+            <canvas ref={velocityChartRef}></canvas>
+          </div>
         </section>
       )}
 
       {displacementSeries.length > 0 && (
         <section className="chart-section">
-          <canvas ref={displacementChartRef} width="800" height="280"></canvas>
+          <div className="chart-canvas-wrapper chart-canvas-wrapper--secondary">
+            <canvas ref={displacementChartRef}></canvas>
+          </div>
         </section>
       )}
 
@@ -1422,18 +1298,14 @@ const ChartComponent = ({ data }) => {
                 </tr>
               </thead>
               <tbody>
-                {currentIntersections.map((point, idx) => {
-                  const speedValue = getSeriesValueAtTime(velocitySeries, point.time);
-                  const displacementValue = getSeriesValueAtTime(displacementSeries, point.time);
-                  return (
+                {currentIntersections.map((point, idx) => (
                     <tr key={`${point.time}-${idx}`}>
                       <td>{idx + 1}</td>
                       <td>{formatTime(point.time)}</td>
-                      <td>{formatSpeed(speedValue)}</td>
-                      <td>{formatDisplacement(displacementValue)}</td>
+                      <td>{formatSpeed(velocityMap.get(point.time) ?? null)}</td>
+                      <td>{formatDisplacement(displacementMap.get(point.time) ?? null)}</td>
                     </tr>
-                  );
-                })}
+                ))}
               </tbody>
             </table>
           </div>
@@ -1442,7 +1314,7 @@ const ChartComponent = ({ data }) => {
       {extremumPoints.length > 0 && (
         <aside className="intersection-panel">
           <div className="intersection-panel__header">
-            <span className="chart-chip" style={{ backgroundColor: "rgba(220, 38, 38, 0.15)", color: "rgb(220, 38, 38)", border: "1px solid rgb(220, 38, 38)" }}>
+            <span className="chart-chip" style={STYLE_EXTREMUM_HEADER}>
               Экстремумы интерферограммы ({extremumPoints.length})
             </span>
             <p>Точки максимумов и минимумов интерферосигнала</p>
@@ -1461,7 +1333,7 @@ const ChartComponent = ({ data }) => {
                 {extremumPoints.map((point, idx) => (
                   <tr key={`ext-${point.time}-${idx}`}>
                     <td>{idx + 1}</td>
-                    <td style={{ color: point.type === "max" ? "rgb(220, 38, 38)" : "rgb(37, 99, 235)", fontWeight: 600 }}>
+                    <td style={point.type === "max" ? STYLE_EXTREMUM_MAX : STYLE_EXTREMUM_MIN}>
                       {point.type === "max" ? "MAX" : "MIN"}
                     </td>
                     <td>{formatTime(point.time)}</td>
@@ -1475,6 +1347,6 @@ const ChartComponent = ({ data }) => {
       )}
     </div>
   );
-};
+});
 
 export default ChartComponent;

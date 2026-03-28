@@ -234,9 +234,21 @@
   font-family: "Roboto Mono", Consolas, monospace;
 }
 
-canvas {
-  max-width: 100%;
-  height: auto;
+.chart-canvas-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.chart-canvas-wrapper--main {
+  height: 400px;
+}
+
+.chart-canvas-wrapper--secondary {
+  height: 280px;
+}
+
+.chart-canvas-wrapper canvas {
+  display: block;
 }
 
 .axis-toggle-group {
